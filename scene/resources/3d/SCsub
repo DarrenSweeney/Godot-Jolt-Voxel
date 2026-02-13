@@ -15,6 +15,7 @@ env.add_source_files(env.scene_sources, "world_3d.cpp")
 env.add_source_files(env.scene_sources, "skeleton/*.cpp")
 
 if not env["disable_physics_3d"]:
+    env.add_source_files(env.scene_sources, "custom_voxel_shape_3d.cpp")
     env.add_source_files(env.scene_sources, "box_shape_3d.cpp")
     env.add_source_files(env.scene_sources, "capsule_shape_3d.cpp")
     env.add_source_files(env.scene_sources, "circle_shape_3d.cpp")

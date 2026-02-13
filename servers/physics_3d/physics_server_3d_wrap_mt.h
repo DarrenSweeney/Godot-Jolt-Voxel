@@ -86,6 +86,7 @@ public:
 	FUNCRID(separation_ray_shape)
 	FUNCRID(sphere_shape)
 	FUNCRID(box_shape)
+	FUNCRID(voxel_shape)
 	FUNCRID(capsule_shape)
 	FUNCRID(cylinder_shape)
 	FUNCRID(convex_polygon_shape)

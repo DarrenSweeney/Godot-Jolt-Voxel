@@ -129,6 +129,7 @@ public:
 	virtual RID separation_ray_shape_create() override;
 	virtual RID sphere_shape_create() override;
 	virtual RID box_shape_create() override;
+	virtual RID voxel_shape_create() override;
 	virtual RID capsule_shape_create() override;
 	virtual RID cylinder_shape_create() override;
 	virtual RID convex_polygon_shape_create() override;

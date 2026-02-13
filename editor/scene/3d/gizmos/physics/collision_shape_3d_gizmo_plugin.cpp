@@ -37,6 +37,7 @@
 #include "editor/scene/3d/node_3d_editor_plugin.h"
 #include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/resources/3d/box_shape_3d.h"
+#include "scene/resources/3d/custom_voxel_shape_3d.h"
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/concave_polygon_shape_3d.h"
 #include "scene/resources/3d/convex_polygon_shape_3d.h"
@@ -114,6 +115,10 @@ String CollisionShape3DGizmoPlugin::get_handle_name(const EditorNode3DGizmo *p_g
 		return helper->box_get_handle_name(p_id);
 	}
 
+	if (Object::cast_to<CustomVoxelShape3D>(*s)) {
+		return helper->box_get_handle_name(p_id);
+	}
+
 	if (Object::cast_to<CapsuleShape3D>(*s)) {
 		return helper->capsule_get_handle_name(p_id);
 	}
@@ -145,6 +150,11 @@ Variant CollisionShape3DGizmoPlugin::get_handle_value(const EditorNode3DGizmo *p
 	if (Object::cast_to<BoxShape3D>(*s)) {
 		Ref<BoxShape3D> bs = s;
 		return bs->get_size();
+	}
+
+	if (Object::cast_to<CustomVoxelShape3D>(*s)) {
+		Ref<CustomVoxelShape3D> vs = s;
+		return vs->get_size();
 	}
 
 	if (Object::cast_to<CapsuleShape3D>(*s)) {
@@ -221,6 +231,15 @@ void CollisionShape3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, i
 		cs->set_global_position(position);
 	}
 
+	if (Object::cast_to<CustomVoxelShape3D>(*s)) {
+		Ref<CustomVoxelShape3D> vs = s;
+		Vector3 size = vs->get_size();
+		Vector3 position;
+		helper->box_set_handle(sg, p_id, size, position);
+		vs->set_size(size);
+		cs->set_global_position(position);
+	}
+
 	if (Object::cast_to<CapsuleShape3D>(*s)) {
 		Ref<CapsuleShape3D> cs2 = s;
 
@@ -270,6 +289,10 @@ void CollisionShape3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo
 
 	if (Object::cast_to<BoxShape3D>(*s)) {
 		helper->box_commit_handle(TTR("Change Box Shape Size"), p_cancel, cs, s.ptr());
+	}
+
+	if (Object::cast_to<CustomVoxelShape3D>(*s)) {
+		helper->box_commit_handle(TTR("Change Voxel Box Shape Size"), p_cancel, cs, s.ptr());
 	}
 
 	if (Object::cast_to<CapsuleShape3D>(*s)) {
@@ -415,6 +438,27 @@ void CollisionShape3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 		}
 
 		const Vector<Vector3> handles = helper->box_get_handles(bs->get_size());
+
+		p_gizmo->add_lines(lines, material, false, collision_color);
+		p_gizmo->add_collision_segments(lines);
+		p_gizmo->add_handles(handles, handles_material);
+	}
+
+	if (Object::cast_to<CustomVoxelShape3D>(*s)) {
+		Ref<CustomVoxelShape3D> vs = s;
+		Vector<Vector3> lines;
+		AABB aabb;
+		aabb.position = -vs->get_size() / 2;
+		aabb.size = vs->get_size();
+
+		for (int i = 0; i < 12; i++) {
+			Vector3 a, b;
+			aabb.get_edge(i, a, b);
+			lines.push_back(a);
+			lines.push_back(b);
+		}
+
+		const Vector<Vector3> handles = helper->box_get_handles(vs->get_size());
 
 		p_gizmo->add_lines(lines, material, false, collision_color);
 		p_gizmo->add_collision_segments(lines);

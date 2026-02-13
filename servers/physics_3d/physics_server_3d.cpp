@@ -677,6 +677,8 @@ RID PhysicsServer3D::shape_create(ShapeType p_shape) {
 			return sphere_shape_create();
 		case SHAPE_BOX:
 			return box_shape_create();
+		case SHAPE_VOXEL:
+			return voxel_shape_create();
 		case SHAPE_CAPSULE:
 			return capsule_shape_create();
 		case SHAPE_CYLINDER:
@@ -701,6 +703,7 @@ void PhysicsServer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("separation_ray_shape_create"), &PhysicsServer3D::separation_ray_shape_create);
 	ClassDB::bind_method(D_METHOD("sphere_shape_create"), &PhysicsServer3D::sphere_shape_create);
 	ClassDB::bind_method(D_METHOD("box_shape_create"), &PhysicsServer3D::box_shape_create);
+	ClassDB::bind_method(D_METHOD("voxel_shape_create"), &PhysicsServer3D::voxel_shape_create);
 	ClassDB::bind_method(D_METHOD("capsule_shape_create"), &PhysicsServer3D::capsule_shape_create);
 	ClassDB::bind_method(D_METHOD("cylinder_shape_create"), &PhysicsServer3D::cylinder_shape_create);
 	ClassDB::bind_method(D_METHOD("convex_polygon_shape_create"), &PhysicsServer3D::convex_polygon_shape_create);
@@ -1053,6 +1056,7 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(SHAPE_SEPARATION_RAY);
 	BIND_ENUM_CONSTANT(SHAPE_SPHERE);
 	BIND_ENUM_CONSTANT(SHAPE_BOX);
+	BIND_ENUM_CONSTANT(SHAPE_VOXEL);
 	BIND_ENUM_CONSTANT(SHAPE_CAPSULE);
 	BIND_ENUM_CONSTANT(SHAPE_CYLINDER);
 	BIND_ENUM_CONSTANT(SHAPE_CONVEX_POLYGON);

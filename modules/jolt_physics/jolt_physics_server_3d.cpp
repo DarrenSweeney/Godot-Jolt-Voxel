@@ -41,6 +41,7 @@
 #include "objects/jolt_soft_body_3d.h"
 #include "servers/physics_3d/physics_server_3d_wrap_mt.h"
 #include "shapes/jolt_box_shape_3d.h"
+#include "shapes/jolt_voxel_shape_3d.h"
 #include "shapes/jolt_capsule_shape_3d.h"
 #include "shapes/jolt_concave_polygon_shape_3d.h"
 #include "shapes/jolt_convex_polygon_shape_3d.h"
@@ -87,6 +88,13 @@ RID JoltPhysicsServer3D::sphere_shape_create() {
 
 RID JoltPhysicsServer3D::box_shape_create() {
 	JoltShape3D *shape = memnew(JoltBoxShape3D);
+	RID rid = shape_owner.make_rid(shape);
+	shape->set_rid(rid);
+	return rid;
+}
+
+RID JoltPhysicsServer3D::voxel_shape_create() {
+	JoltShape3D *shape = memnew(JoltVoxelShape3D);
 	RID rid = shape_owner.make_rid(shape);
 	shape->set_rid(rid);
 	return rid;

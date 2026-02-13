@@ -257,6 +257,7 @@ public:
 		SHAPE_CONCAVE_POLYGON, ///< vector3 array:"triangles" , or Dictionary with "indices" (int array) and "triangles" (Vector3 array)
 		SHAPE_HEIGHTMAP, ///< dict( int:"width", int:"depth",float:"cell_size", float_array:"heights"
 		SHAPE_SOFT_BODY, ///< Used internally, can't be created from the physics server.
+		SHAPE_VOXEL,
 		SHAPE_CUSTOM, ///< Server-Implementation based custom shape, calling shape_create() with this value will result in an error
 	};
 
@@ -266,6 +267,7 @@ public:
 	virtual RID separation_ray_shape_create() = 0;
 	virtual RID sphere_shape_create() = 0;
 	virtual RID box_shape_create() = 0;
+	virtual RID voxel_shape_create() = 0;
 	virtual RID capsule_shape_create() = 0;
 	virtual RID cylinder_shape_create() = 0;
 	virtual RID convex_polygon_shape_create() = 0;

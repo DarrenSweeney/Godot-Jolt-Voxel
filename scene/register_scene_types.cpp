@@ -357,6 +357,7 @@
 #include "scene/resources/3d/convex_polygon_shape_3d.h"
 #include "scene/resources/3d/cylinder_shape_3d.h"
 #include "scene/resources/3d/height_map_shape_3d.h"
+#include "scene/resources/3d/custom_voxel_shape_3d.h"
 #include "scene/resources/3d/importer_mesh.h"
 #include "scene/resources/3d/mesh_library.h"
 #include "scene/resources/3d/navigation_mesh_source_geometry_data_3d.h"
@@ -1027,6 +1028,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(WorldBoundaryShape3D);
 	GDREGISTER_CLASS(ConvexPolygonShape3D);
 	GDREGISTER_CLASS(ConcavePolygonShape3D);
+	GDREGISTER_CLASS(CustomVoxelShape3D);
 #endif // PHYSICS_3D_DISABLED
 	GDREGISTER_CLASS(World3D);
 
@@ -1301,6 +1303,7 @@ void register_scene_types() {
 #ifndef PHYSICS_3D_DISABLED
 	ClassDB::add_compatibility_class("Area", "Area3D");
 	ClassDB::add_compatibility_class("BoxShape", "BoxShape3D");
+	ClassDB::add_compatibility_class("VoxelShape", "CustomVoxelShape3D");
 	ClassDB::add_compatibility_class("CapsuleShape", "CapsuleShape3D");
 	ClassDB::add_compatibility_class("CollisionObject", "CollisionObject3D");
 	ClassDB::add_compatibility_class("CollisionPolygon", "CollisionPolygon3D");

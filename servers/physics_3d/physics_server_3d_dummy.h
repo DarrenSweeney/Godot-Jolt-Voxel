@@ -139,6 +139,7 @@ public:
 	virtual RID separation_ray_shape_create() override { return RID(); }
 	virtual RID sphere_shape_create() override { return RID(); }
 	virtual RID box_shape_create() override { return RID(); }
+	virtual RID voxel_shape_create() override { return RID(); }
 	virtual RID capsule_shape_create() override { return RID(); }
 	virtual RID cylinder_shape_create() override { return RID(); }
 	virtual RID convex_polygon_shape_create() override { return RID(); }
