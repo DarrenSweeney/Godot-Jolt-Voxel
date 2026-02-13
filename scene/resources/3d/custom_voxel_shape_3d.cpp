@@ -83,49 +83,49 @@ uint8_t CustomVoxelShape3D::get_voxel(const Vector3i &p_pos) const {
 	return voxel_data[idx];
 }
 
-// TODO: Maybe a box is better for editor performance? Remove this block if not.
-//Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const {
-//	Vector<Vector3> lines;
-//	AABB aabb;
-//	aabb.position = -size / 2;
-//	aabb.size = size;
-//
-//	for (int i = 0; i < 12; i++) {
-//		Vector3 a, b;
-//		aabb.get_edge(i, a, b);
-//		lines.push_back(a);
-//		lines.push_back(b);
-//	}
-//
-//	return lines;
-//}
-
 Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const {
-	// Keep the main bounding box lines
-	Vector<Vector3> lines; //= Shape3D::get_debug_mesh_lines(); // Or your current AABB code
+	Vector<Vector3> lines;
+	AABB aabb;
+	aabb.position = -size / 2;
+	aabb.size = size;
 
-	// Draw tiny markers for solid voxels (Verification only!)
-	if (voxel_data.size() > 0) {
-		Vector3 cell_dim = size / Vector3(resolution);
-		Vector3 offset = -size / 2.0 + (cell_dim / 2.0);
-
-		for (int z = 0; z < resolution.z; z++) {
-			for (int y = 0; y < resolution.y; y++) {
-				for (int x = 0; x < resolution.x; x++) {
-					if (get_voxel(Vector3i(x, y, z)) > 0) {
-						Vector3 center = offset + Vector3(x, y, z) * cell_dim;
-						// Draw a small 0.1m cross at the center of each solid voxel
-						lines.push_back(center + Vector3(0.1, 0, 0));
-						lines.push_back(center - Vector3(0.1, 0, 0));
-						lines.push_back(center + Vector3(0, 0.1, 0));
-						lines.push_back(center - Vector3(0, 0.1, 0));
-					}
-				}
-			}
-		}
+	for (int i = 0; i < 12; i++) {
+		Vector3 a, b;
+		aabb.get_edge(i, a, b);
+		lines.push_back(a);
+		lines.push_back(b);
 	}
+
 	return lines;
 }
+
+// NOTE: Just for debugging
+//Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const {
+//	// Keep the main bounding box lines
+//	Vector<Vector3> lines;
+//
+//	// Draw tiny markers for solid voxels (Verification only!)
+//	if (voxel_data.size() > 0) {
+//		Vector3 cell_dim = size / Vector3(resolution);
+//		Vector3 offset = -size / 2.0 + (cell_dim / 2.0);
+//
+//		for (int z = 0; z < resolution.z; z++) {
+//			for (int y = 0; y < resolution.y; y++) {
+//				for (int x = 0; x < resolution.x; x++) {
+//					if (get_voxel(Vector3i(x, y, z)) > 0) {
+//						Vector3 center = offset + Vector3(x, y, z) * cell_dim;
+//						// Draw a small 0.1m cross at the center of each solid voxel
+//						lines.push_back(center + Vector3(0.1, 0, 0));
+//						lines.push_back(center - Vector3(0.1, 0, 0));
+//						lines.push_back(center + Vector3(0, 0.1, 0));
+//						lines.push_back(center - Vector3(0, 0.1, 0));
+//					}
+//				}
+//			}
+//		}
+//	}
+//	return lines;
+//}
 
 Ref<ArrayMesh> CustomVoxelShape3D::get_debug_arraymesh_faces(const Color &p_modulate) const {
 	Array box_array;
