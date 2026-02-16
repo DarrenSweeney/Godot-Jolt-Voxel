@@ -9,7 +9,7 @@ private:
 	Vector3 size = Vector3(1, 1, 1);
 	Vector3i resolution;
 	float voxel_size_per_meter;
-	PackedByteArray voxel_data;
+	PackedByteArray voxel_data; // classification data
 
 	_FORCE_INLINE_ int _get_index(int p_x, int p_y, int p_z) const {
 		// Matches: y * (width * depth) + z * width + x

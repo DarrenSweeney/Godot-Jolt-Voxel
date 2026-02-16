@@ -1,17 +1,28 @@
 #include "jolt_voxel_shape_3d.h"
+#include "voxel_shape.h"
 
 #include "../jolt_project_settings.h"
 #include "../misc/jolt_type_conversions.h"
 
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
+
 JPH::ShapeRefC JoltVoxelShape3D::_build() const {
 	const float min_half_extent = (float)size[size.min_axis_index()];
 	const float actual_margin = MIN(margin, min_half_extent * JoltProjectSettings::collision_margin_fraction);
 
+#if 0
 	const JPH::BoxShapeSettings shape_settings(to_jolt(size), actual_margin);
-	const JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
+#else
+	VoxelShapeSettings shape_settings;
+	shape_settings.half_extents = to_jolt(size);
+	shape_settings.resolution = JPH::Vec3((float)resolution.x, (float)resolution.y, (float)resolution.z);
+	shape_settings.classificationData = voxel_data.ptr();
+	shape_settings.dataSize = (size_t)voxel_data.size();
+#endif
 
+
+	const JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
 	ERR_FAIL_COND_V_MSG(shape_result.HasError(), nullptr, vformat("Failed to build Jolt Physics voxel shape with %s. It returned the following error: '%s'. This shape belongs to %s.", to_string(), to_godot(shape_result.GetError()), _owners_to_string()));
 
 	return shape_result.Get();

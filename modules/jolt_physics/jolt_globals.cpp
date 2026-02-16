@@ -34,6 +34,7 @@
 #include "shapes/jolt_custom_double_sided_shape.h"
 #include "shapes/jolt_custom_ray_shape.h"
 #include "shapes/jolt_custom_user_data_shape.h"
+#include "shapes/voxel_shape.h"
 
 #include "core/string/print_string.h"
 #include "core/variant/variant.h"
@@ -107,6 +108,7 @@ void jolt_initialize() {
 	JoltCustomRayShape::register_type();
 	JoltCustomUserDataShape::register_type();
 	JoltCustomDoubleSidedShape::register_type();
+	VoxelShape::sRegister();
 
 	JoltGroupFilter::instance = new JoltGroupFilter();
 	JoltGroupFilter::instance->SetEmbedded();
