@@ -93,6 +93,8 @@ public:
 	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override { return JPH::PhysicsMaterial::sDefault; }
 	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
 
+	JPH::Vec3 GetSurfaceNormalAt(JPH::Vec3Arg inLocalPoint) const;
+
 	// --- Must Implement: Collision Queries ---
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
 
