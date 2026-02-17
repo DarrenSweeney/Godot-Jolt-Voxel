@@ -2,7 +2,8 @@
 
 #include "jolt_shape_3d.h"
 
-class JoltVoxelShape3D final : public JoltShape3D {
+class JoltVoxelShape3D final : public JoltShape3D
+{
 	Vector3 size; // Total size in meters
 	Vector3i resolution; // Voxel grid dimensions
 	PackedByteArray voxel_data;

@@ -7,7 +7,8 @@
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 
 
-JPH::ShapeRefC JoltVoxelShape3D::_build() const {
+JPH::ShapeRefC JoltVoxelShape3D::_build() const
+{
 	const float min_half_extent = (float)size[size.min_axis_index()];
 	const float actual_margin = MIN(margin, min_half_extent * JoltProjectSettings::collision_margin_fraction);
 
@@ -28,7 +29,8 @@ JPH::ShapeRefC JoltVoxelShape3D::_build() const {
 	return shape_result.Get();
 }
 
-void JoltVoxelShape3D::set_data(const Variant &p_data) {
+void JoltVoxelShape3D::set_data(const Variant &p_data)
+{
 	ERR_FAIL_COND(p_data.get_type() != Variant::DICTIONARY);
 	Dictionary d = p_data;
 
@@ -49,7 +51,8 @@ void JoltVoxelShape3D::set_data(const Variant &p_data) {
 	destroy(); // Forces _build() to be called again
 }
 
-Variant JoltVoxelShape3D::get_data() const {
+Variant JoltVoxelShape3D::get_data() const
+{
 	Dictionary d;
 	d["size"] = size;
 	d["resolution"] = resolution;
@@ -57,7 +60,8 @@ Variant JoltVoxelShape3D::get_data() const {
 	return d;
 }
 
-void JoltVoxelShape3D::set_margin(float p_margin) {
+void JoltVoxelShape3D::set_margin(float p_margin)
+{
 	if (unlikely(margin == p_margin)) {
 		return;
 	}
@@ -67,10 +71,12 @@ void JoltVoxelShape3D::set_margin(float p_margin) {
 	destroy();
 }
 
-String JoltVoxelShape3D::to_string() const {
+String JoltVoxelShape3D::to_string() const
+{
 	return vformat("{size=%v resolution=%v margin=%f}", size, resolution, margin);
 }
 
-AABB JoltVoxelShape3D::get_aabb() const {
+AABB JoltVoxelShape3D::get_aabb() const
+{
 	return AABB(-size, size * 2.0f);
 }

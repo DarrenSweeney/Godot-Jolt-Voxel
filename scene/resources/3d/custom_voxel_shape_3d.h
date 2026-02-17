@@ -2,7 +2,8 @@
 
 #include "scene/resources/3d/shape_3d.h"
 
-class CustomVoxelShape3D : public Shape3D {
+class CustomVoxelShape3D : public Shape3D
+{
 	GDCLASS(CustomVoxelShape3D, Shape3D);
 
 private:

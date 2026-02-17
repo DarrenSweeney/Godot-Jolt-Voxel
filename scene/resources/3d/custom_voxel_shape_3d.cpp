@@ -8,7 +8,8 @@ CustomVoxelShape3D::CustomVoxelShape3D() :
 }
 
 
-void CustomVoxelShape3D::_bind_methods() {
+void CustomVoxelShape3D::_bind_methods()
+{
 	ClassDB::bind_method(D_METHOD("set_size", "size"), &CustomVoxelShape3D::set_size);
 	ClassDB::bind_method(D_METHOD("get_size"), &CustomVoxelShape3D::get_size);
 
@@ -24,8 +25,10 @@ void CustomVoxelShape3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_data"), "set_voxel_data", "get_voxel_data");
 }
 
-void CustomVoxelShape3D::_update_shape() {
-	if (voxel_data.size() != (resolution.x * resolution.y * resolution.z)) {
+void CustomVoxelShape3D::_update_shape()
+{
+	if (voxel_data.size() != (resolution.x * resolution.y * resolution.z))
+	{
 		// TODO: Maybe assert here?
 	}
 
@@ -38,26 +41,31 @@ void CustomVoxelShape3D::_update_shape() {
 	Shape3D::_update_shape();
 }
 
-void CustomVoxelShape3D::set_size(const Vector3 &p_size) {
+void CustomVoxelShape3D::set_size(const Vector3 &p_size)
+{
 	size = p_size;
 	emit_changed();
 }
 
-Vector3 CustomVoxelShape3D::get_size() const {
+Vector3 CustomVoxelShape3D::get_size() const
+{
 	return size;
 }
 
-void CustomVoxelShape3D::set_voxel_data(const PackedByteArray &p_data) {
+void CustomVoxelShape3D::set_voxel_data(const PackedByteArray &p_data)
+{
 	voxel_data = p_data;
 	_update_shape();
 	emit_changed();
 }
 
-PackedByteArray CustomVoxelShape3D::get_voxel_data() const {
+PackedByteArray CustomVoxelShape3D::get_voxel_data() const
+{
 	return voxel_data;
 }
 
-void CustomVoxelShape3D::set_resolution(const Vector3i &p_res) {
+void CustomVoxelShape3D::set_resolution(const Vector3i &p_res)
+{
 	ERR_FAIL_COND(p_res.x <= 0 || p_res.y <= 0 || p_res.z <= 0);
 	resolution = p_res;
 	voxel_data.resize(resolution.x * resolution.y * resolution.z);
@@ -65,7 +73,8 @@ void CustomVoxelShape3D::set_resolution(const Vector3i &p_res) {
 	emit_changed();
 }
 
-void CustomVoxelShape3D::set_voxel(const Vector3i &p_pos, uint8_t p_value) {
+void CustomVoxelShape3D::set_voxel(const Vector3i &p_pos, uint8_t p_value)
+{
 	ERR_FAIL_INDEX(p_pos.x, resolution.x);
 	ERR_FAIL_INDEX(p_pos.y, resolution.y);
 	ERR_FAIL_INDEX(p_pos.z, resolution.z);
@@ -78,12 +87,14 @@ void CustomVoxelShape3D::set_voxel(const Vector3i &p_pos, uint8_t p_value) {
 	emit_changed();
 }
 
-uint8_t CustomVoxelShape3D::get_voxel(const Vector3i &p_pos) const {
+uint8_t CustomVoxelShape3D::get_voxel(const Vector3i &p_pos) const
+{
 	int idx = _get_index(p_pos.x, p_pos.y, p_pos.z);
 	return voxel_data[idx];
 }
 
-Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const {
+Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const
+{
 	Vector<Vector3> lines;
 	AABB aabb;
 	aabb.position = -size / 2;
@@ -127,7 +138,8 @@ Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const {
 //	return lines;
 //}
 
-Ref<ArrayMesh> CustomVoxelShape3D::get_debug_arraymesh_faces(const Color &p_modulate) const {
+Ref<ArrayMesh> CustomVoxelShape3D::get_debug_arraymesh_faces(const Color &p_modulate) const
+{
 	Array box_array;
 	box_array.resize(RS::ARRAY_MAX);
 	BoxMesh::create_mesh_array(box_array, size);
@@ -145,6 +157,7 @@ Ref<ArrayMesh> CustomVoxelShape3D::get_debug_arraymesh_faces(const Color &p_modu
 	return box_mesh;
 }
 
-real_t CustomVoxelShape3D::get_enclosing_radius() const {
+real_t CustomVoxelShape3D::get_enclosing_radius() const
+{
 	return size.length() / 2;
 }

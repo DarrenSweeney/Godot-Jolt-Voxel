@@ -44,10 +44,6 @@ public:
 			mDataSize(inSettings.dataSize)
 
 	{
-		if (mClassificationData == nullptr) 
-			outResult.SetError("Voxel data is missing!");
-			return;
-
 		if (outResult.HasError())
 			return;
 
