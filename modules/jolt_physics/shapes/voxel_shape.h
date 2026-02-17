@@ -14,7 +14,8 @@
 
 #include "jolt_custom_shape_type.h"
 
-class VoxelShapeSettings final : public JPH::ShapeSettings {
+class VoxelShapeSettings final : public JPH::ShapeSettings
+{
 public:
 	JPH::Vec3 half_extents;
 	JPH::Vec3 resolution;
@@ -24,16 +25,16 @@ public:
 	virtual JPH::ShapeSettings::ShapeResult Create() const override;
 };
 
-class VoxelShape : public JPH::Shape {
+class VoxelShape : public JPH::Shape
+{
 public:
 	JPH::Vec3 mHalfExtents;
 	JPH::Vec3 mResolution;
-	// We store the data as a JPH::Array or a raw pointer
-	// passed from the JoltVoxelShape3D wrapper
 	const uint8_t *mClassificationData = nullptr;
 	size_t mDataSize = 0;
 
-	VoxelShape() = default;
+	VoxelShape() :
+			JPH::Shape(JPH::EShapeType::User1, JoltCustomShapeSubType::VOXEL) { }
 
 	VoxelShape(const VoxelShapeSettings &inSettings, JPH::ShapeSettings::ShapeResult &outResult) :
 			JPH::Shape(JPH::EShapeType::User1, JoltCustomShapeSubType::VOXEL, inSettings, outResult),
@@ -43,9 +44,9 @@ public:
 			mDataSize(inSettings.dataSize)
 
 	{
-		//if (mClassificationData == nullptr) 
-			//outResult.SetError("Voxel data is missing!");
-			//return;
+		if (mClassificationData == nullptr) 
+			outResult.SetError("Voxel data is missing!");
+			return;
 
 		if (outResult.HasError())
 			return;
@@ -59,16 +60,11 @@ public:
 								const JPH::CollideShapeSettings &inCollideShapeSettings, JPH::CollideShapeCollector &ioCollector,
 								const JPH::ShapeFilter &inShapeFilter);
 
-	static void sCollideVoxelVsConvex(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
-								JPH::Mat44Arg inCenterOfMassTransform1, JPH::Mat44Arg inCenterOfMassTransform2,
-								const JPH::SubShapeIDCreator &inSubShapeIDCreator1, const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
-								const JPH::CollideShapeSettings &inCollideShapeSettings, JPH::CollideShapeCollector &ioCollector,
-								const JPH::ShapeFilter &inShapeFilter);
-
 	bool IsSolidAt(JPH::Vec3Arg inLocalPoint) const;
 
 	// Helper to convert Local Meters -> Integer Voxel Coordinates
-	JPH::Vec3 GetVoxelCoord(JPH::Vec3Arg inLocalPoint) const {
+	JPH::Vec3 GetVoxelCoord(JPH::Vec3Arg inLocalPoint) const
+	{
 		JPH::Vec3 unit_coord = (inLocalPoint + mHalfExtents) / (2.0f * mHalfExtents) * mResolution;
 		return JPH::Vec3(
 				JPH::Clamp((uint32_t)unit_coord.GetX(), 0u, (uint32_t)mResolution.GetX() - 1),
@@ -77,19 +73,22 @@ public:
 	}
 
 	// Converts integer grid coordinates back to local meters (center of voxel)
-	JPH::Vec3 GetLocalPos(uint32_t x, uint32_t y, uint32_t z) const {
+	JPH::Vec3 GetLocalPos(uint32_t x, uint32_t y, uint32_t z) const
+	{
 		JPH::Vec3 voxel_size = (2.0f * mHalfExtents) / mResolution;
 		return -mHalfExtents + (JPH::Vec3((float)x, (float)y, (float)z) * voxel_size) + (voxel_size * 0.5f);
 	}
 
-	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const {
+	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const
+	{
 		return y * (mResolution.GetX() * mResolution.GetZ()) + z * mResolution.GetX() + x;
 	}
 
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
 	virtual float GetInnerRadius() const override { return 0.0f; }
-	virtual JPH::MassProperties GetMassProperties() const override {
+	virtual JPH::MassProperties GetMassProperties() const override
+	{
 		JPH::MassProperties p;
 		p.mMass = 1.0f;
 		p.mInertia = JPH::Mat44::sIdentity();
@@ -101,18 +100,16 @@ public:
 	// --- Must Implement: Collision Queries ---
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
 
+	// Empty implementation
 	virtual void CollideSoftBodyVertices(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::CollideSoftBodyVertexIterator &inVertices, JPH::uint inNumVertices, int inCollidingShapeIndex) const override {}
-
 	virtual bool CastRay(const JPH::RayCast &inRay, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::RayCastResult &ioHit) const override { return false; }
-
 	virtual void CastRay(const JPH::RayCast &inRay, const JPH::RayCastSettings &inRayCastSettings, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CastRayCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter = {}) const override {}
-
-	// --- Must Implement: Triangles (For complex collisions) ---
-	virtual void GetTrianglesStart(GetTrianglesContext &ioContext, const JPH::AABox &inBox, JPH::Vec3Arg inPositionCOM, JPH::QuatArg inRotation, JPH::Vec3Arg inScale) const override;
-	virtual int GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, JPH::Float3 *outTriangleVertices, const JPH::PhysicsMaterial **outMaterials = nullptr) const override;
+	virtual void GetTrianglesStart(GetTrianglesContext &ioContext, const JPH::AABox &inBox, JPH::Vec3Arg inPositionCOM, JPH::QuatArg inRotation, JPH::Vec3Arg inScale) const override { }
+	virtual int GetTrianglesNext(GetTrianglesContext &ioContext, int inMaxTrianglesRequested, JPH::Float3 *outTriangleVertices, const JPH::PhysicsMaterial **outMaterials = nullptr) const override { return 0; }
 
 	// --- Must Implement: Buoyancy ---
-	virtual void GetSubmergedVolume(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, JPH::Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, JPH::RVec3Arg inBaseOffset)) const override {
+	virtual void GetSubmergedVolume(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, JPH::Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, JPH::RVec3Arg inBaseOffset)) const override
+	{
 		outTotalVolume = GetVolume();
 		outSubmergedVolume = 0.0f;
 	}
