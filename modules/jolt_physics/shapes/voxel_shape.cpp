@@ -29,43 +29,55 @@ void VoxelShape::CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator
 	JPH_ASSERT(false);	// NOT IMPLEMENTED
 }
 
-bool VoxelShape::IsSolidAt(int inX, int inY, int inZ) const
+int VoxelShape::GetIndex(uint32_t x, uint32_t y, uint32_t z) const
 {
-	if (inX < 0 || inX >= mResolution.GetX() ||
-			inY < 0 || inY >= mResolution.GetY() ||
-			inZ < 0 || inZ >= mResolution.GetZ()) {
+	// Z is slowest, Y is medium, X is fastest
+	return (z * mResolution.GetY() * mResolution.GetX()) + (y * mResolution.GetX()) + x;
+}
+
+bool VoxelShape::IsSolidAt(const JPH::Vec3& voxelGridPos) const
+{
+	if (voxelGridPos.GetX() < 0 || voxelGridPos.GetX() >= mResolution.GetX() ||
+			voxelGridPos.GetY() < 0 || voxelGridPos.GetY() >= mResolution.GetY() ||
+			voxelGridPos.GetZ() < 0 || voxelGridPos.GetZ() >= mResolution.GetZ())
+	{
 		return false;
 	}
 
-	int64_t index = GetIndex((uint32_t)inX, (uint32_t)inY, (uint32_t)inZ);
+	int64_t index = GetIndex((uint32_t)voxelGridPos.GetX(), (uint32_t)voxelGridPos.GetY(), (uint32_t)voxelGridPos.GetZ());
 
 	uint8_t byteValue = mVoxelBitfieldData[index >> 3];
 	uint8_t bitMask = (1 << (index & 7));
 
 	return (byteValue & bitMask) != 0;
 }
-JPH::Vec3 VoxelShape::DecodeNormal(uint8_t mask) const
-{
-	static const JPH::Vec3 dirs[6] = {
-		JPH::Vec3(0, 1, 0),		// UP
-		JPH::Vec3(0, -1, 0),	// DOWN
-		JPH::Vec3(-1, 0, 0),	// LEFT
-		JPH::Vec3(1, 0, 0),		// RIGHT
-		JPH::Vec3(0, 0, 1),		// FORWARD
-		JPH::Vec3(0, 0, -1),	// BACK
-	};
 
-	JPH::Vec3 normal(0, 0, 0);
-	for (int i = 0; i < 6; i++)
-	{
-		if (mask & (1 << i)) {
-			normal += dirs[i];
+bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
+{
+	// Identify the 8 neighbors
+	// We floor/ceil the local coordinates to find the surrounding voxel indices
+	int minX = voxelGridPos.GetX();
+	int minY = voxelGridPos.GetY();
+	int minZ = voxelGridPos.GetZ();
+
+	const uint8_t* voxelGrid = mVoxelBitfieldData;
+	const size_t voxelGridSize = mVoxelBitfieldSize;
+
+	for (int x = minX; x <= minX + 1; ++x) {
+		for (int y = minY; y <= minY + 1; ++y) {
+			for (int z = minZ; z <= minZ + 1; ++z) {
+				const JPH::Vec3 pos = JPH::Vec3(x, y, z);
+
+				// Check if the voxel at this point is solid.
+				if (IsSolidAt(pos)) {
+					return true;
+				}
+			}
 		}
 	}
 
-	return normal.IsNearZero() ? JPH::Vec3(0, 1, 0) : normal.Normalized();
+	return false;
 }
-
 
 void VoxelShape::sCollideVoxelVsVoxelLocal(
 		const VoxelShape *inShape1,
@@ -84,62 +96,33 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
 
 	// Iterate over the corners first.
-	const uint8_t *corner_data = inShape1->mVoxelCornerData;
-	int corner_data_size = (int)inShape1->mVoxelCornerDataSize;
+	// mVoxelCornerData is 4 bytes, x,y,z of the voxel grid position, the w is the encoded normal.
+	const JPH::Vec4* corner_data = (const JPH::Vec4*)inShape1->mVoxelCornerData;
+	int corner_data_size = (int)inShape1->mVoxelCornerDataSize / sizeof(JPH::Vec4);
 	for (int i = 0; i < corner_data_size; i++)
 	{
+		// Transform the corner of Shape 1 into the local grid space of Shape 2
+		const JPH::Vec3 pos(corner_data[i].GetX(), corner_data[i].GetY(), corner_data[i].GetZ());
+		const JPH::Vec3 posIn2 = transform1To2 * pos;
 
-	}
-
+		// Check if this corner point is "inside" any solid voxels in Shape 2
+		if (inShape2->CheckVoxelCollision(posIn2))
+		{
+			// TODO:
 #if 0
-	for (int d = 0; d < 2; d++) {
-		const uint8_t *data = datasets[d];
-		size_t size = sizes[d];
-		if (!data || size == 0) {
-			continue;
-		}
+			JPH::CollideShapeResult result(
+					worldPos1,
+					worldPos2,
+					-worldNormal, // Jolt expects normal pointing from 2 to 1
+					penetrationDepth,
+					inSubShapeIDCreator1.GetID(),
+					inSubShapeIDCreator2.GetID(),
+					JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
-		for (size_t i = 0; i + 3 < size; i += 4) {
-			// 1. Get Point from Shape 1 in World Space
-			JPH::Vec3 localPos1 = inShape1->GetLocalPos(data[i], data[i + 1], data[i + 2]);
-			JPH::Vec3 worldPos = inCenterOfMassTransform1 * localPos1;
-
-			// 2. Early out if not in intersection AABB
-			if (!inIntersection.Contains(worldPos)) {
-				continue;
-			}
-
-			// 3. Transform World Point to Shape 2's Local Space
-			JPH::Vec3 localPos2 = invTransform2 * worldPos;
-
-			// 4. THE VOXEL CHECK: Is there a voxel in Shape 2 at this position?
-			// Convert local float position to integer grid coordinates
-			JPH::Vec3 coord = inShape2->GetVoxelCoord(localPos2);
-
-			if (inShape2->IsSolidAt((int)coord.GetX(), (int)coord.GetY(), (int)coord.GetZ()))
-			{
-				// 5. Build the Result
-				JPH::Vec3 localNormal = inShape1->DecodeNormal(data[i + 3]);
-				JPH::Vec3 worldNormal = inCenterOfMassTransform1.Multiply3x3(localNormal);
-
-				JPH::CollideShapeResult result;
-				result.mContactPointOn1 = worldPos;
-				result.mContactPointOn2 = worldPos;
-
-				result.mSubShapeID1 = inSubShapeIDCreator2.GetID();
-				result.mSubShapeID2 = inSubShapeIDCreator1.GetID();
-				result.mPenetrationAxis = worldNormal
-				result.mPenetrationDepth = 0.1f;
-
-				ioCollector.AddHit(result);
-
-				if (ioCollector.ShouldEarlyOut()) {
-					return;
-				}
-			}
+			ioCollector.AddHit(result);
+#endif
 		}
 	}
-#endif
 }
 
 void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
@@ -173,6 +156,28 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, intersection, ioCollector);
 }
 
+JPH::Vec3 VoxelShape::DecodeNormal(uint8_t mask) const
+{
+	static const JPH::Vec3 dirs[6] = {
+		JPH::Vec3(0, 1, 0),		// UP
+		JPH::Vec3(0, -1, 0),	// DOWN
+		JPH::Vec3(-1, 0, 0),	// LEFT
+		JPH::Vec3(1, 0, 0),		// RIGHT
+		JPH::Vec3(0, 0, 1),		// FORWARD
+		JPH::Vec3(0, 0, -1),	// BACK
+	};
+
+	JPH::Vec3 normal(0, 0, 0);
+	for (int i = 0; i < 6; i++)
+	{
+		if (mask & (1 << i)) {
+			normal += dirs[i];
+		}
+	}
+
+	return normal.IsNearZero() ? JPH::Vec3(0, 1, 0) : normal.Normalized();
+}
+
 void VoxelShape::sRegister()
 {
 	JPH::ShapeFunctions &f = JPH::ShapeFunctions::sGet(JoltCustomShapeSubType::VOXEL);
@@ -180,5 +185,4 @@ void VoxelShape::sRegister()
 	f.mColor = JPH::Color::sOrange;
 
 	JPH::CollisionDispatch::sRegisterCollideShape(JoltCustomShapeSubType::VOXEL, JoltCustomShapeSubType::VOXEL, sCollideVoxelVsVoxel);
-	JPH::CollisionDispatch::sRegisterCollideShape(JoltCustomShapeSubType::VOXEL, JoltCustomShapeSubType::VOXEL, JPH::CollisionDispatch::sReversedCollideShape);
 }
