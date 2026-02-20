@@ -50,6 +50,7 @@ void CustomVoxelShape3D::_update_shape()
 	d["resolution"] = resolution;
 	d["voxel_corner_data"] = voxel_corner_data;
 	d["voxel_edge_data"] = voxel_edge_data;
+	d["voxel_bitfield_data"] = voxel_bitfield_data;
 
 	PhysicsServer3D::get_singleton()->shape_set_data(get_shape(), d);
 	Shape3D::_update_shape();

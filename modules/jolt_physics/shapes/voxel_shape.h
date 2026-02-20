@@ -77,8 +77,7 @@ public:
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
 			const JPH::AABox &inIntersection, // The pre-calculated AABB intersection
-			JPH::CollideShapeCollector &ioCollector, // The Jolt collector
-			bool inFlip // TRUE if this is Pass 2
+			JPH::CollideShapeCollector &ioCollector // The Jolt collector
 	);
 
 	static void sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
@@ -87,7 +86,7 @@ public:
 								const JPH::CollideShapeSettings &inCollideShapeSettings, JPH::CollideShapeCollector &ioCollector,
 								const JPH::ShapeFilter &inShapeFilter);
 
-	bool IsSolidAt(JPH::Vec3Arg inLocalPoint) const;
+	bool IsSolidAt(int inX, int inY, int inZ) const;
 
 	// Helper to convert Local Meters -> Integer Voxel Coordinates
 	JPH::Vec3 GetVoxelCoord(JPH::Vec3Arg inLocalPoint) const
@@ -108,7 +107,8 @@ public:
 
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const
 	{
-		return y * (mResolution.GetX() * mResolution.GetZ()) + z * mResolution.GetX() + x;
+		// Z is slowest, Y is medium, X is fastest
+		return (z * mResolution.GetY() * mResolution.GetX()) + (y * mResolution.GetX()) + x;
 	}
 
 	// --- Must Implement: Basic Geometry ---
@@ -125,7 +125,6 @@ public:
 	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
 
 	JPH::Vec3 DecodeNormal(uint8_t mask) const;
-	//JPH::Vec3 GetSurfaceNormalAt(JPH::Vec3Arg inLocalPoint) const;
 
 	// --- Must Implement: Collision Queries ---
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
@@ -148,9 +147,9 @@ public:
 	virtual float GetVolume() const override { return mHalfExtents.GetX() * mHalfExtents.GetY() * mHalfExtents.GetZ() * 8.0f; }
 	virtual JPH::uint GetSubShapeIDBitsRecursive() const override { return 0; }
 
-#ifdef JPH_DEBUG_RENDERER
-	virtual void Draw(JPH::DebugRenderer *inRenderer, JPH::RMat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, JPH::ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const override;
-#endif
-
 	static void sRegister();
+
+#ifdef JPH_DEBUG_RENDERER
+	virtual void Draw(JPH::DebugRenderer *inRenderer, JPH::RMat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, JPH::ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const override {}
+#endif // JPH_DEBUG_RENDERER
 };
