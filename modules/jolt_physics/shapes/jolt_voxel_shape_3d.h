@@ -6,7 +6,9 @@ class JoltVoxelShape3D final : public JoltShape3D
 {
 	Vector3 size; // Total size in meters
 	Vector3i resolution; // Voxel grid dimensions
-	PackedByteArray voxel_data;
+	PackedByteArray voxel_corner_data;
+	PackedByteArray voxel_edge_data;
+	PackedByteArray voxel_bitfield_data;
 	float margin = 0.04f;
 
 	virtual JPH::ShapeRefC _build() const override;

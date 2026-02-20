@@ -25,6 +25,7 @@ void VoxelShape::CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator
 		JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const
 {
 	print_line("VOXEL CollidePoint");
+#if 0
 	if (GetLocalBounds().Contains(inPoint) && mClassificationData)
 	{
 		JPH::Vec3 coord = GetVoxelCoord(inPoint);
@@ -39,19 +40,59 @@ void VoxelShape::CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator
 			ioCollector.AddHit(result);
 		}
 	}
+#endif
 }
 
 bool VoxelShape::IsSolidAt(JPH::Vec3Arg inLocalPoint) const
 {
-	if (!GetLocalBounds().Contains(inLocalPoint) || !mClassificationData)
+	// 1. Convert floating point local position to integer grid coordinates
+	// Assuming your grid starts at (0,0,0) and each voxel is 1.0 units.
+	// If your voxels are a different size, you'd divide by voxel_size first.
+	int x = (int)std::floor(inLocalPoint.GetX());
+	int y = (int)std::floor(inLocalPoint.GetY());
+	int z = (int)std::floor(inLocalPoint.GetZ());
+
+	// 2. Bounds check
+	if (x < 0 || y < 0 || z < 0 || x >= mResolution.GetX() || y >= mResolution.GetY() || z >= mResolution.GetZ()) {
 		return false;
+	}
 
-	JPH::Vec3 coord = GetVoxelCoord(inLocalPoint);
-	int index = GetIndex((uint32_t)coord.GetX(), (uint32_t)coord.GetY(), (uint32_t)coord.GetZ());
+	// 3. Calculate the linear index of the voxel
+	int64_t index = (int64_t)z * mResolution.GetY() * mResolution.GetX() + (int64_t)y * mResolution.GetX() + x;
 
-	return mClassificationData[index] > 0;
+	// 4. Extract the bit
+	// index >> 3 is the same as index / 8 (finds the byte)
+	// index & 7 is the same as index % 8 (finds the bit position 0-7)
+	uint8_t byteValue = mVoxelBitfieldData[index >> 3];
+	uint8_t bitMask = (1 << (index & 7));
+
+	return (byteValue & bitMask) != 0;
 }
 
+JPH::Vec3 VoxelShape::DecodeNormal(uint8_t mask) const
+{
+	static const JPH::Vec3 dirs[6] = {
+		JPH::Vec3(0, 1, 0),		// UP
+		JPH::Vec3(0, -1, 0),	// DOWN
+		JPH::Vec3(-1, 0, 0),	// LEFT
+		JPH::Vec3(1, 0, 0),		// RIGHT
+		JPH::Vec3(0, 0, 1),		// FORWARD
+		JPH::Vec3(0, 0, -1),	// BACK
+	};
+
+	JPH::Vec3 normal(0, 0, 0);
+	for (int i = 0; i < 6; i++)
+	{
+		if (mask & (1 << i)) {
+			normal += dirs[i];
+		}
+	}
+
+	return normal.IsNearZero() ? JPH::Vec3(0, 1, 0) : normal.Normalized();
+}
+
+// UNUSED!!!!!
+#if 0
 JPH::Vec3 VoxelShape::GetSurfaceNormalAt(JPH::Vec3Arg inLocalPoint) const
 {
 	JPH::Vec3 coord = GetVoxelCoord(inLocalPoint);
@@ -82,6 +123,76 @@ JPH::Vec3 VoxelShape::GetSurfaceNormalAt(JPH::Vec3Arg inLocalPoint) const
 
 	return normal.IsNearZero() ? JPH::Vec3(0, 1, 0) : normal.Normalized();
 }
+#endif
+
+
+void VoxelShape::sCollideVoxelVsVoxelLocal(
+		const VoxelShape *inShape1, // The shape we are testing points FROM
+		const VoxelShape *inShape2, // The shape we are testing volume AGAINST
+		JPH::Mat44Arg inCenterOfMassTransform1, // Transform for shape 1
+		JPH::Mat44Arg inCenterOfMassTransform2, // Transform for shape 2
+		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
+		const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
+		const JPH::AABox &inIntersection, // The pre-calculated AABB intersection
+		JPH::CollideShapeCollector &ioCollector, // The Jolt collector
+		bool inFlip // TRUE if this is Pass 2
+)
+{
+	const uint8_t *datasets[] = { inShape1->mVoxelCornerData, inShape1->mVoxelEdgeData };
+	const size_t sizes[] = { inShape1->mVoxelCornerDataSize, inShape1->mVoxelEdgeDataSize };
+
+	for (int d = 0; d < 2; d++) {
+		const uint8_t *data = datasets[d];
+		size_t size = sizes[d];
+		if (!data || size == 0) {
+			continue;
+		}
+
+		for (size_t i = 0; i + 3 < size; i += 4) {
+			JPH::Vec3 localPos = inShape1->GetLocalPos(data[i], data[i + 1], data[i + 2]);
+			JPH::Vec3 worldPos = inCenterOfMassTransform1 * localPos;
+
+			if (!inIntersection.Contains(worldPos)) {
+				continue;
+			}
+
+			JPH::Vec3 localNormal = inShape1->DecodeNormal(data[i + 3]);
+			JPH::Vec3 worldNormal = inCenterOfMassTransform1.Multiply3x3(localNormal);
+
+			JPH::CollideShapeResult result;
+
+			// Handle SubShape IDs and Points based on flip status
+			if (!inFlip)
+			{
+				result.mSubShapeID1 = inSubShapeIDCreator1.GetID();
+				result.mSubShapeID2 = inSubShapeIDCreator2.GetID();
+				result.mContactPointOn1 = worldPos;
+				result.mContactPointOn2 = worldPos;
+				result.mPenetrationAxis = -worldNormal; // Axis pointing from 2 to 1
+			} else
+			{
+				// PASS 2: Shape 2 is providing the points, so it is "Shape 1" locally
+				// but must be reported as "Shape 2" to the collector.
+				result.mSubShapeID1 = inSubShapeIDCreator2.GetID();
+				result.mSubShapeID2 = inSubShapeIDCreator1.GetID();
+				result.mContactPointOn1 = worldPos;
+				result.mContactPointOn2 = worldPos;
+				result.mPenetrationAxis = worldNormal; // Flip the normal direction
+			}
+
+			result.mPenetrationDepth = 0.1f;
+
+			result.mSubShapeID1 = inSubShapeIDCreator1.GetID();
+			result.mSubShapeID2 = inSubShapeIDCreator2.GetID();
+
+			ioCollector.AddHit(result);
+
+			if (ioCollector.ShouldEarlyOut()) {
+				return;
+			}
+		}
+	}
+}
 
 void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
 		JPH::Mat44Arg inCenterOfMassTransform1, JPH::Mat44Arg inCenterOfMassTransform2,
@@ -89,93 +200,39 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 		const JPH::CollideShapeSettings &inCollideShapeSettings, JPH::CollideShapeCollector &ioCollector,
 		const JPH::ShapeFilter &inShapeFilter)
 {
-
+	// 1. Unwrap here once
 	auto unwrap = [](const JPH::Shape *in) -> const VoxelShape * {
 		const JPH::Shape *current = in;
 		while (current->GetType() == JPH::EShapeType::Decorated) {
 			current = static_cast<const JPH::DecoratedShape *>(current)->GetInnerShape();
 		}
-		if (current->GetSubType() == JoltCustomShapeSubType::VOXEL) {
-			return static_cast<const VoxelShape *>(current);
-		}
-		return nullptr;
+		return (current->GetSubType() == JoltCustomShapeSubType::VOXEL) ? static_cast<const VoxelShape *>(current) : nullptr;
 	};
 
 	const VoxelShape *shape1 = unwrap(inShape1);
 	const VoxelShape *shape2 = unwrap(inShape2);
-
-	if (!shape1 || !shape2)
+	if (!shape1 || !shape2) {
 		return;
+	}
 
-	// AABB Intersection in World Space to limit the search area
+	// 2. Shared AABB check
 	JPH::AABox worldBounds1 = shape1->GetWorldSpaceBounds(inCenterOfMassTransform1, inScale1);
 	JPH::AABox worldBounds2 = shape2->GetWorldSpaceBounds(inCenterOfMassTransform2, inScale2);
 	JPH::AABox intersection = worldBounds1.Intersect(worldBounds2);
-
-	if (!intersection.IsValid())
+	if (!intersection.IsValid()) {
 		return;
+	}
 
-	// Define a lambda for the point-vs-volume pass to avoid code duplication
-	auto processPass = [&](const VoxelShape *pShape, const VoxelShape *vShape,
-							   JPH::Mat44Arg pTransform, JPH::Mat44Arg vTransform,
-							   const JPH::SubShapeIDCreator &pID, const JPH::SubShapeIDCreator &vID,
-							   bool isSwapped) {
+	// Pass 1: Shape 1's points against Shape 2's volume
+	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, intersection, ioCollector, false);
 
-		JPH::Mat44 invP = pTransform.Inversed();
-		JPH::Mat44 invV = vTransform.Inversed();
-		JPH::AABox localIntersect = intersection.Transformed(invP);
-
-		JPH::Vec3 start = pShape->GetVoxelCoord(localIntersect.mMin);
-		JPH::Vec3 end = pShape->GetVoxelCoord(localIntersect.mMax);
-
-		for (uint32_t z = (uint32_t)start.GetZ(); z <= (uint32_t)end.GetZ(); ++z)
-		{
-			for (uint32_t y = (uint32_t)start.GetY(); y <= (uint32_t)end.GetY(); ++y)
-			{
-				for (uint32_t x = (uint32_t)start.GetX(); x <= (uint32_t)end.GetX(); ++x)
-				{
-					uint8_t type = pShape->mClassificationData[pShape->GetIndex(x, y, z)];
-
-					// Only check Corners (1) and Edges (2)
-					if (type == 1 || type == 2)
-					{
-						JPH::Vec3 pLocalPos = pShape->GetLocalPos(x, y, z);
-						JPH::Vec3 worldPos = pTransform * pLocalPos;
-						JPH::Vec3 vLocalPos = invV * worldPos;
-
-						if (vShape->IsSolidAt(vLocalPos))
-						{
-							JPH::CollideShapeResult result;
-							result.mContactPointOn1 = worldPos;
-							result.mContactPointOn2 = worldPos;
-
-							// Calculate Normal from the volume shape (vShape)
-							JPH::Vec3 localNormal = vShape->GetSurfaceNormalAt(vLocalPos);
-							JPH::Vec3 worldNormal = vTransform.Multiply3x3(localNormal);
-
-							// Jolt Rule: Penetration axis must point from Shape 2 to Shape 1
-							result.mPenetrationAxis = isSwapped ? worldNormal : -worldNormal;
-							result.mPenetrationDepth = 0.1f; // Adjust based on voxel size
-							result.mSubShapeID1 = isSwapped ? vID.GetID() : pID.GetID();
-							result.mSubShapeID2 = isSwapped ? pID.GetID() : vID.GetID();
-
-							ioCollector.AddHit(result);
-						}
-					}
-				}
-			}
-		}
-	};
-
-	// Pass 1: Shape 1 (Points) vs Shape 2 (Volume)
-	processPass(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, false);
-
-	// Pass 2: Shape 2 (Points) vs Shape 1 (Volume)
-	processPass(shape2, shape1, inCenterOfMassTransform2, inCenterOfMassTransform1, inSubShapeIDCreator2, inSubShapeIDCreator1, true);
+	// Pass 2: Shape 2's points against Shape 1's volume (Note the 'true' for flipping)
+	sCollideVoxelVsVoxelLocal(shape2, shape1, inCenterOfMassTransform2, inCenterOfMassTransform1, inSubShapeIDCreator2, inSubShapeIDCreator1, intersection, ioCollector, true);
 }
 
 #ifdef JPH_DEBUG_RENDERER
 void VoxelShape::Draw(JPH::DebugRenderer *inRenderer, JPH::RMat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, JPH::ColorArg inColor, bool inUseMaterialColors, bool inDrawWireframe) const {
+#if 0
 	// NOTE: To prevent lag, we only draw if the object isn't massive
 	if (mClassificationData && mResolution.GetX() <= 64)
 	{
@@ -199,6 +256,7 @@ void VoxelShape::Draw(JPH::DebugRenderer *inRenderer, JPH::RMat44Arg inCenterOfM
 			}
 		}
 	}
+#endif
 }
 #endif
 

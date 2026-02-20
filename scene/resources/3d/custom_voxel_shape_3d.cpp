@@ -16,26 +16,40 @@ void CustomVoxelShape3D::_bind_methods()
 	ClassDB::bind_method(D_METHOD("set_resolution", "resolution"), &CustomVoxelShape3D::set_resolution);
 	ClassDB::bind_method(D_METHOD("get_resolution"), &CustomVoxelShape3D::get_resolution);
 
-	ClassDB::bind_method(D_METHOD("set_voxel_data", "data"), &CustomVoxelShape3D::set_voxel_data);
-	ClassDB::bind_method(D_METHOD("get_voxel_data"), &CustomVoxelShape3D::get_voxel_data);
+	ClassDB::bind_method(D_METHOD("set_voxel_corner_data", "voxel_corner_data"), &CustomVoxelShape3D::set_voxel_corner_data);
+	ClassDB::bind_method(D_METHOD("get_voxel_corner_data"), &CustomVoxelShape3D::get_voxel_corner_data);
 
+	ClassDB::bind_method(D_METHOD("set_voxel_edge_data", "voxel_edge_data"), &CustomVoxelShape3D::set_voxel_edge_data);
+	ClassDB::bind_method(D_METHOD("get_voxel_edge_data"), &CustomVoxelShape3D::get_voxel_edge_data);
+
+	ClassDB::bind_method(D_METHOD("set_voxel_bitfield_data", "voxel_bitfield_data"), &CustomVoxelShape3D::set_voxel_bitfield_data);
+	ClassDB::bind_method(D_METHOD("get_voxel_bitfield_data"), &CustomVoxelShape3D::get_voxel_bitfield_data);
+	
 	// Bind Properties (This makes them show up in the Inspector and allows dot syntax)
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "size"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3I, "resolution"), "set_resolution", "get_resolution");
-	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_data"), "set_voxel_data", "get_voxel_data");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_corner_data"), "set_voxel_corner_data", "get_voxel_corner_data");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_edge_data"), "set_voxel_edge_data", "get_voxel_edge_data");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_bitfield_data"), "set_voxel_bitfield_data", "get_voxel_bitfield_data");
 }
 
 void CustomVoxelShape3D::_update_shape()
 {
-	if (voxel_data.size() != (resolution.x * resolution.y * resolution.z))
+	//if (voxel_data.size() != (resolution.x * resolution.y * resolution.z))
 	{
 		// TODO: Maybe assert here?
 	}
 
+	 // Don't build until we have actual data
+	//if (voxel_corner_data.is_empty() && voxel_edge_data.is_empty()) {
+		//return;
+	//}
+
 	Dictionary d;
 	d["size"] = size / 2;
 	d["resolution"] = resolution;
-	d["data"] = voxel_data;
+	d["voxel_corner_data"] = voxel_corner_data;
+	d["voxel_edge_data"] = voxel_edge_data;
 
 	PhysicsServer3D::get_singleton()->shape_set_data(get_shape(), d);
 	Shape3D::_update_shape();
@@ -44,6 +58,7 @@ void CustomVoxelShape3D::_update_shape()
 void CustomVoxelShape3D::set_size(const Vector3 &p_size)
 {
 	size = p_size;
+	_update_shape();
 	emit_changed();
 }
 
@@ -52,27 +67,50 @@ Vector3 CustomVoxelShape3D::get_size() const
 	return size;
 }
 
-void CustomVoxelShape3D::set_voxel_data(const PackedByteArray &p_data)
+void CustomVoxelShape3D::set_voxel_corner_data(const PackedByteArray &p_data)
 {
-	voxel_data = p_data;
+	voxel_corner_data = p_data;
 	_update_shape();
 	emit_changed();
 }
 
-PackedByteArray CustomVoxelShape3D::get_voxel_data() const
+PackedByteArray CustomVoxelShape3D::get_voxel_corner_data() const
 {
-	return voxel_data;
+	return voxel_corner_data;
+}
+
+void CustomVoxelShape3D::set_voxel_edge_data(const PackedByteArray &p_data)
+{
+	voxel_edge_data = p_data;
+	_update_shape();
+	emit_changed();
+}
+
+PackedByteArray CustomVoxelShape3D::get_voxel_edge_data() const
+{
+	return voxel_edge_data;
+}
+
+void CustomVoxelShape3D::set_voxel_bitfield_data(const PackedByteArray &p_data) {
+	voxel_bitfield_data = p_data;
+	_update_shape();
+	emit_changed();
+}
+
+PackedByteArray CustomVoxelShape3D::get_voxel_bitfield_data() const {
+	return voxel_bitfield_data;
 }
 
 void CustomVoxelShape3D::set_resolution(const Vector3i &p_res)
 {
 	ERR_FAIL_COND(p_res.x <= 0 || p_res.y <= 0 || p_res.z <= 0);
 	resolution = p_res;
-	voxel_data.resize(resolution.x * resolution.y * resolution.z);
+	//voxel_data.resize(resolution.x * resolution.y * resolution.z);
 	_update_shape();
 	emit_changed();
 }
 
+#if 0
 void CustomVoxelShape3D::set_voxel(const Vector3i &p_pos, uint8_t p_value)
 {
 	ERR_FAIL_INDEX(p_pos.x, resolution.x);
@@ -92,6 +130,7 @@ uint8_t CustomVoxelShape3D::get_voxel(const Vector3i &p_pos) const
 	int idx = _get_index(p_pos.x, p_pos.y, p_pos.z);
 	return voxel_data[idx];
 }
+#endif
 
 Vector<Vector3> CustomVoxelShape3D::get_debug_mesh_lines() const
 {
