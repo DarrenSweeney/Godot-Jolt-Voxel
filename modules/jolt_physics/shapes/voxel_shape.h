@@ -69,6 +69,17 @@ public:
 		outResult.Set(this);
 	}
 
+	static void sCollidePointsVsGrid(
+			const VoxelShape *inPointsShape,
+			const VoxelShape *inGridShape,
+			JPH::Mat44Arg inTransformPointsToGrid,
+			JPH::Mat44Arg inTransformPointsToWorld,
+			JPH::Mat44Arg inTransformGridToWorld,
+			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
+			const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
+			bool inIsShape1ProvidingPoints,
+			JPH::CollideShapeCollector &ioCollector);
+
 	static void sCollideVoxelVsVoxelLocal(
 			const VoxelShape *inShape1, // The shape we are testing points FROM
 			const VoxelShape *inShape2, // The shape we are testing volume AGAINST
@@ -90,13 +101,6 @@ public:
 
 	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
 	bool CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const;
-
-	// Converts integer grid coordinates back to local meters (center of voxel)
-	JPH::Vec3 GetLocalPos(uint32_t x, uint32_t y, uint32_t z) const
-	{
-		JPH::Vec3 voxel_size = (2.0f * mHalfExtents) / mResolution;
-		return -mHalfExtents + (JPH::Vec3((float)x, (float)y, (float)z) * voxel_size) + (voxel_size * 0.5f);
-	}
 
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
 
