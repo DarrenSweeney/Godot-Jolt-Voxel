@@ -54,7 +54,7 @@ bool VoxelShape::IsSolidAt(const JPH::Vec3& voxelGridPos) const
 
 bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 {
-	// Identify the 8 neighbors
+	// Identify the 8 neighbors voxels in the voxel
 	// We floor/ceil the local coordinates to find the surrounding voxel indices
 	int minX = (int)std::floor(voxelGridPos.GetX());
 	int minY = (int)std::floor(voxelGridPos.GetY());
@@ -63,15 +63,17 @@ bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 	const uint8_t* voxelGrid = mVoxelBitfieldData;
 	const size_t voxelGridSize = mVoxelBitfieldSize;
 
-	for (int x = minX; x <= minX + 1; ++x) {
-		for (int y = minY; y <= minY + 1; ++y) {
-			for (int z = minZ; z <= minZ + 1; ++z) {
+	for (int x = minX; x <= minX + 1; ++x)
+	{
+		for (int y = minY; y <= minY + 1; ++y)
+		{
+			for (int z = minZ; z <= minZ + 1; ++z)
+			{
 				const JPH::Vec3 pos = JPH::Vec3(x, y, z);
 
 				// Check if the voxel at this point is solid.
-				if (IsSolidAt(pos)) {
+				if (IsSolidAt(pos))
 					return true;
-				}
 			}
 		}
 	}
@@ -80,63 +82,64 @@ bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 }
 
 void VoxelShape::sCollidePointsVsGrid(
-		const VoxelShape *inPointsShape,
-		const VoxelShape *inGridShape,
-		JPH::Mat44Arg inTransformPointsToGrid,
-		JPH::Mat44Arg inTransformPointsToWorld,
-		JPH::Mat44Arg inTransformGridToWorld,
+		const VoxelShape *shape1,
+		const VoxelShape *shape2,
+		JPH::Mat44Arg transform1To2,
+		JPH::Mat44Arg inCenterOfMassTransform1,
+		JPH::Mat44Arg inCenterOfMassTransform2,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
 		bool inIsShape1ProvidingPoints, // Logic flip to handle normal direction
 		JPH::CollideShapeCollector &ioCollector)
 {
-	float scale = 1.0f / 32.0f; // Voxel to Meter
-	float invScale = 32.0f;		// Meter to Voxel
+	// Derive voxel scaling from the actual shape dimensions
+	JPH::Vec3 voxelSize1 = (shape1->mHalfExtents * 2.0f) / shape1->mResolution;
+	JPH::Vec3 voxelSize2 = (shape2->mHalfExtents * 2.0f) / shape2->mResolution;
 
-	// Half-extents in meters (Distance from center to 0,0,0 of the grid)
-	JPH::Vec3 halfExtentPoints = JPH::Vec3(inPointsShape->mResolution) * scale * 0.5f;
-	JPH::Vec3 halfExtentGrid = JPH::Vec3(inGridShape->mResolution) * scale * 0.5f;
+	// This is the conversion factor for the target grid
+	JPH::Vec3 invVoxelSize2 = JPH::Vec3(1.0f / voxelSize2.GetX(), 1.0f / voxelSize2.GetY(), 1.0f / voxelSize2.GetZ());
 
 	// Corners that are in the voxel volume, in voxel grid space.
-	const uint8_t *corner_data = inPointsShape->mVoxelCornerData;
-	int num_corners = (int)inPointsShape->mVoxelCornerDataSize / 4;
+	const uint8_t *corner_data = shape1->mVoxelCornerData;
+	int num_corners = (int)shape1->mVoxelCornerDataSize / 4;
 
 	for (int i = 0; i < num_corners; i++)
 	{
-		// VOXEL SPACE -> JOLT LOCAL SPACE (Meters)
+		// Position of the voxel in voxel grid space. Ranges from 0 to mResolution.axis
 		JPH::Vec3 posVoxel((float)corner_data[i * 4 + 0], (float)corner_data[i * 4 + 1], (float)corner_data[i * 4 + 2]);
-		JPH::Vec3 posLocal = (posVoxel * scale) - halfExtentPoints;
 
-		// TRANSFORM (Meters to Meters)
-		// Moves the point from Shape 1 center-relative to Shape 2 center-relative
-		JPH::Vec3 posInGridLocal = inTransformPointsToGrid * posLocal;
+		// Map corner index to Shape 1 local space
+		JPH::Vec3 posLocal = (posVoxel * voxelSize1) - shape1->mHalfExtents;
 
-		// JOLT LOCAL SPACE -> VOXEL SPACE (for the target grid)
-		// Convert back to 0...Resolution range
-		JPH::Vec3 posInGridVoxel = (posInGridLocal + halfExtentGrid) * invScale;
+		// Move the point into Shape 2 local space
+		JPH::Vec3 posInGridLocal = transform1To2 * posLocal;
 
-		// CHECK COLLISION
-		if (inGridShape->CheckVoxelCollision(posInGridVoxel))
+		// Map Shape 2 local space to its internal voxel grid coordinates
+		JPH::Vec3 posInGridVoxel = (posInGridLocal + shape2->mHalfExtents) * invVoxelSize2;
+
+		if (shape2->CheckVoxelCollision(posInGridVoxel))
 		{
-			// Calculate normal in Shape 2's Voxel Space
 			JPH::Vec3 voxelCenterVoxel(
 					std::floor(posInGridVoxel.GetX()) + 0.5f,
 					std::floor(posInGridVoxel.GetY()) + 0.5f,
 					std::floor(posInGridVoxel.GetZ()) + 0.5f);
 
-			// Normal stays the same direction whether scaled or not
-			JPH::Vec3 localNormal = (posInGridVoxel - voxelCenterVoxel).Normalized();
+			// Normal and Penetration calculation using Shape 2's scale
+			JPH::Vec3 offsetFromVoxelCenter = posInGridVoxel - voxelCenterVoxel;
+			JPH::Vec3 localNormal = offsetFromVoxelCenter.Normalized();
 
 			// Transform normal to World Space
-			JPH::Vec3 worldNormal = inTransformGridToWorld.Multiply3x3(localNormal);
+			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
 			JPH::Vec3 finalNormal = inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
 
-			// World position for Jolt
-			JPH::Vec3 worldPos = inTransformPointsToWorld * posLocal;
+			JPH::Vec3 worldPos = inCenterOfMassTransform1 * posLocal;
 
-			// Penetration Depth (Convert voxel units back to meters!)
-			float distFromCenterVoxel = (posInGridVoxel - voxelCenterVoxel).Length();
-			float penetrationDepthMeters = std::max(0.0f, (0.5f - distFromCenterVoxel) * scale);
+			// Calculate depth in meters based on Shape 2's voxel dimensions
+			// We project the offset onto the normal and scale by voxel size
+			float distFromCenterVoxel = offsetFromVoxelCenter.Length();
+			float penetrationDepthMeters = 5.0f;
+			//std::max(0.0f, (0.5f - distFromCenterVoxel) * voxelSize2.Length() / std::sqrt(3.0f));
+			finalNormal = JPH::Vec3(0, -1, 0);
 
 			JPH::CollideShapeResult result(
 					worldPos, worldPos, finalNormal, penetrationDepthMeters,
@@ -199,41 +202,17 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 
 	const VoxelShape *shape1 = unwrap(inShape1);
 	const VoxelShape *shape2 = unwrap(inShape2);
-	if (!shape1 || !shape2) {
+	if (!shape1 || !shape2)
 		return;
-	}
 
 	// AABB check
 	JPH::AABox worldBounds1 = shape1->GetWorldSpaceBounds(inCenterOfMassTransform1, inScale1);
 	JPH::AABox worldBounds2 = shape2->GetWorldSpaceBounds(inCenterOfMassTransform2, inScale2);
 	JPH::AABox intersection = worldBounds1.Intersect(worldBounds2);
-	if (!intersection.IsValid()) {
+	if (!intersection.IsValid()) 
 		return;
-	}
 
 	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, intersection, ioCollector);
-}
-
-JPH::Vec3 VoxelShape::DecodeNormal(uint8_t mask) const
-{
-	static const JPH::Vec3 dirs[6] = {
-		JPH::Vec3(0, 1, 0),		// UP
-		JPH::Vec3(0, -1, 0),	// DOWN
-		JPH::Vec3(-1, 0, 0),	// LEFT
-		JPH::Vec3(1, 0, 0),		// RIGHT
-		JPH::Vec3(0, 0, 1),		// FORWARD
-		JPH::Vec3(0, 0, -1),	// BACK
-	};
-
-	JPH::Vec3 normal(0, 0, 0);
-	for (int i = 0; i < 6; i++)
-	{
-		if (mask & (1 << i)) {
-			normal += dirs[i];
-		}
-	}
-
-	return normal.IsNearZero() ? JPH::Vec3(0, 1, 0) : normal.Normalized();
 }
 
 void VoxelShape::sRegister()

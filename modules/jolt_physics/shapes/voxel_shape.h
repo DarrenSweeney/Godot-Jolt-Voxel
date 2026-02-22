@@ -117,8 +117,6 @@ public:
 	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override { return JPH::PhysicsMaterial::sDefault; }
 	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
 
-	JPH::Vec3 DecodeNormal(uint8_t mask) const;
-
 	// --- Must Implement: Collision Queries ---
 
 	// Empty implementation
