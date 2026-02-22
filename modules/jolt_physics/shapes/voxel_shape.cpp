@@ -60,9 +60,6 @@ bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 	int minY = (int)std::floor(voxelGridPos.GetY());
 	int minZ = (int)std::floor(voxelGridPos.GetZ());
 
-	const uint8_t* voxelGrid = mVoxelBitfieldData;
-	const size_t voxelGridSize = mVoxelBitfieldSize;
-
 	for (int x = minX; x <= minX + 1; ++x)
 	{
 		for (int y = minY; y <= minY + 1; ++y)
@@ -79,6 +76,77 @@ bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 	}
 
 	return false;
+}
+
+JPH::Vec3 VoxelShape::ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const
+{
+	// Normalized position within the grid (0 to 1 per axis)
+	JPH::Vec3 normalized(
+			posInGridVoxel.GetX() / mResolution.GetX(),
+			posInGridVoxel.GetY() / mResolution.GetY(),
+			posInGridVoxel.GetZ() / mResolution.GetZ());
+
+	// Distance to each face (0 = min face, 1 = max face)
+	float distToMinX = normalized.GetX();
+	float distToMaxX = 1.0f - normalized.GetX();
+	float distToMinY = normalized.GetY();
+	float distToMaxY = 1.0f - normalized.GetY();
+	float distToMinZ = normalized.GetZ();
+	float distToMaxZ = 1.0f - normalized.GetZ();
+
+	// Find the closest face
+	float minDist = distToMinX;
+	JPH::Vec3 normal(-1, 0, 0);
+
+	if (distToMaxX < minDist) {
+		minDist = distToMaxX;
+		normal = JPH::Vec3(1, 0, 0);
+	}
+	if (distToMinY < minDist) {
+		minDist = distToMinY;
+		normal = JPH::Vec3(0, -1, 0);
+	}
+	if (distToMaxY < minDist) {
+		minDist = distToMaxY;
+		normal = JPH::Vec3(0, 1, 0);
+	}
+	if (distToMinZ < minDist) {
+		minDist = distToMinZ;
+		normal = JPH::Vec3(0, 0, -1);
+	}
+	if (distToMaxZ < minDist) {
+		normal = JPH::Vec3(0, 0, 1);
+	}
+
+	return normal;
+}
+
+float VoxelShape::ComputePenetrationDepth(const JPH::Vec3 &posInGridVoxel, const JPH::Vec3 &localNormal, const JPH::Vec3 &voxelSize) const
+{
+	// Find the boundaries of the current voxel cell
+	JPH::Vec3 voxelMin(std::floor(posInGridVoxel.GetX()),
+			std::floor(posInGridVoxel.GetY()),
+			std::floor(posInGridVoxel.GetZ()));
+	JPH::Vec3 voxelMax = voxelMin + JPH::Vec3(1.0f, 1.0f, 1.0f);
+
+	// Pick the "exit face" based on the direction of the normal.
+	// If the normal is positive, the exit is at the max boundary of the voxel.
+	JPH::Vec3 exitFace(
+			localNormal.GetX() >= 0.0f ? voxelMax.GetX() : voxelMin.GetX(),
+			localNormal.GetY() >= 0.0f ? voxelMax.GetY() : voxelMin.GetY(),
+			localNormal.GetZ() >= 0.0f ? voxelMax.GetZ() : voxelMin.GetZ());
+
+	// Vector from current point to the exit boundary
+	JPH::Vec3 distToExitVoxel = exitFace - posInGridVoxel;
+
+	// Convert the voxel-space distance into world-space meters before the projection
+	JPH::Vec3 distToExitMeters = distToExitVoxel * voxelSize;
+
+	// Project the distance onto the normal to find the penetration depth
+	// We use max(0, ...) to ensure we don't return a "negative" depth which confuses Jolt
+	float penetration = distToExitMeters.Dot(localNormal);
+
+	return std::max(0.0f, penetration);
 }
 
 void VoxelShape::sCollidePointsVsGrid(
@@ -119,30 +187,21 @@ void VoxelShape::sCollidePointsVsGrid(
 
 		if (shape2->CheckVoxelCollision(posInGridVoxel))
 		{
-			JPH::Vec3 voxelCenterVoxel(
-					std::floor(posInGridVoxel.GetX()) + 0.5f,
-					std::floor(posInGridVoxel.GetY()) + 0.5f,
-					std::floor(posInGridVoxel.GetZ()) + 0.5f);
-
-			// Normal and Penetration calculation using Shape 2's scale
-			JPH::Vec3 offsetFromVoxelCenter = posInGridVoxel - voxelCenterVoxel;
-			JPH::Vec3 localNormal = offsetFromVoxelCenter.Normalized();
+			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
-			JPH::Vec3 finalNormal = inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
+			JPH::Vec3 penetrationAxis = inCenterOfMassTransform1.Multiply3x3(-localNormal); //inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
 
 			JPH::Vec3 worldPos = inCenterOfMassTransform1 * posLocal;
 
-			// Calculate depth in meters based on Shape 2's voxel dimensions
-			// We project the offset onto the normal and scale by voxel size
-			float distFromCenterVoxel = offsetFromVoxelCenter.Length();
-			float penetrationDepthMeters = 5.0f;
-			//std::max(0.0f, (0.5f - distFromCenterVoxel) * voxelSize2.Length() / std::sqrt(3.0f));
-			finalNormal = JPH::Vec3(0, -1, 0);
+			float penetrationDepthMeters = shape2->ComputePenetrationDepth(posInGridVoxel, localNormal, voxelSize2);
+
+			JPH::Vec3 inContactPointOn1 = worldPos;
+			JPH::Vec3 inContactPointOn2 = inContactPointOn1 + worldNormal * penetrationDepthMeters;
 
 			JPH::CollideShapeResult result(
-					worldPos, worldPos, finalNormal, penetrationDepthMeters,
+					inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
 					inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
 					JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 

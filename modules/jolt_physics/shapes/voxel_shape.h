@@ -69,6 +69,9 @@ public:
 		outResult.Set(this);
 	}
 
+	JPH::Vec3 ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const;
+	float ComputePenetrationDepth(const JPH::Vec3 &posInGridVoxel, const JPH::Vec3 &localNormal, const JPH::Vec3 &voxelSize) const;
+
 	static void sCollidePointsVsGrid(
 			const VoxelShape *inPointsShape,
 			const VoxelShape *inGridShape,
