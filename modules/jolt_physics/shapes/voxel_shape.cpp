@@ -31,7 +31,6 @@ void VoxelShape::CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator
 
 int VoxelShape::GetIndex(uint32_t x, uint32_t y, uint32_t z) const
 {
-	// Z is slowest, Y is medium, X is fastest
 	return (z * mResolution.GetY() * mResolution.GetX()) + (y * mResolution.GetX()) + x;
 }
 
@@ -52,7 +51,7 @@ bool VoxelShape::IsSolidAt(const JPH::Vec3& voxelGridPos) const
 	return (byteValue & bitMask) != 0;
 }
 
-bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
+bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 {
 	// Identify the 8 neighbors voxels in the voxel
 	// We floor/ceil the local coordinates to find the surrounding voxel indices
@@ -66,11 +65,13 @@ bool VoxelShape::CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const
 		{
 			for (int z = minZ; z <= minZ + 1; ++z)
 			{
-				const JPH::Vec3 pos = JPH::Vec3(x, y, z);
+				voxelGridPos = JPH::Vec3(x, y, z);
 
 				// Check if the voxel at this point is solid.
-				if (IsSolidAt(pos))
+				if (IsSolidAt(voxelGridPos))
+				{					
 					return true;
+				}
 			}
 		}
 	}
@@ -121,32 +122,29 @@ JPH::Vec3 VoxelShape::ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const
 	return normal;
 }
 
-float VoxelShape::ComputePenetrationDepth(const JPH::Vec3 &posInGridVoxel, const JPH::Vec3 &localNormal, const JPH::Vec3 &voxelSize) const
+JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 {
-	// Find the boundaries of the current voxel cell
-	JPH::Vec3 voxelMin(std::floor(posInGridVoxel.GetX()),
-			std::floor(posInGridVoxel.GetY()),
-			std::floor(posInGridVoxel.GetZ()));
-	JPH::Vec3 voxelMax = voxelMin + JPH::Vec3(1.0f, 1.0f, 1.0f);
+	JPH::Vec3 halfOffset(0.5f, 0.5f, 0.5f);
+	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
-	// Pick the "exit face" based on the direction of the normal.
-	// If the normal is positive, the exit is at the max boundary of the voxel.
-	JPH::Vec3 exitFace(
-			localNormal.GetX() >= 0.0f ? voxelMax.GetX() : voxelMin.GetX(),
-			localNormal.GetY() >= 0.0f ? voxelMax.GetY() : voxelMin.GetY(),
-			localNormal.GetZ() >= 0.0f ? voxelMax.GetZ() : voxelMin.GetZ());
+	// (Index + 0.5) / Res * FullSize - HalfExtent
+	// This maps index 0 to the "minimum" corner and centers everything
+	return ((argIndex + halfOffset) / mResolution) * fullSize - mHalfExtents;
+}
 
-	// Vector from current point to the exit boundary
-	JPH::Vec3 distToExitVoxel = exitFace - posInGridVoxel;
+JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
+{
+	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
-	// Convert the voxel-space distance into world-space meters before the projection
-	JPH::Vec3 distToExitMeters = distToExitVoxel * voxelSize;
+	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
+	JPH::Vec3 shiftedPos = argLocalPos + mHalfExtents;
 
-	// Project the distance onto the normal to find the penetration depth
-	// We use max(0, ...) to ensure we don't return a "negative" depth which confuses Jolt
-	float penetration = distToExitMeters.Dot(localNormal);
+	JPH::Vec3 fractionalIndex = (shiftedPos / fullSize) * mResolution;
 
-	return std::max(0.0f, penetration);
+	JPH::Vec3 maxIndex = mResolution - JPH::Vec3::sReplicate(1.0f);
+	JPH::Vec3 clampedIndex = JPH::Vec3::sMin(JPH::Vec3::sMax(JPH::Vec3::sZero(), fractionalIndex), maxIndex);
+
+	return clampedIndex;
 }
 
 void VoxelShape::sCollidePointsVsGrid(
@@ -176,29 +174,29 @@ void VoxelShape::sCollidePointsVsGrid(
 		// Position of the voxel in voxel grid space. Ranges from 0 to mResolution.axis
 		JPH::Vec3 posVoxel((float)corner_data[i * 4 + 0], (float)corner_data[i * 4 + 1], (float)corner_data[i * 4 + 2]);
 
-		// Map corner index to Shape 1 local space
-		JPH::Vec3 posLocal = (posVoxel * voxelSize1) - shape1->mHalfExtents;
+		// Voxel space to local space for shape 1
+		JPH::Vec3 posLocal = shape1->GetLocalPos(posVoxel);
 
 		// Move the point into Shape 2 local space
-		JPH::Vec3 posInGridLocal = transform1To2 * posLocal;
+		JPH::Vec3 posInShape2Local = transform1To2 * posLocal;
 
 		// Map Shape 2 local space to its internal voxel grid coordinates
-		JPH::Vec3 posInGridVoxel = (posInGridLocal + shape2->mHalfExtents) * invVoxelSize2;
+		JPH::Vec3 posInGridVoxel = shape2->GetGridIndex(posInShape2Local);
 
 		if (shape2->CheckVoxelCollision(posInGridVoxel))
 		{
+			JPH::Vec3 pos2Local = shape2->GetLocalPos(posInGridVoxel);
+
 			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
-			JPH::Vec3 penetrationAxis = inCenterOfMassTransform1.Multiply3x3(-localNormal); //inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
+			JPH::Vec3 penetrationAxis = inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
 
-			JPH::Vec3 worldPos = inCenterOfMassTransform1 * posLocal;
+			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * posLocal;
+			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * pos2Local;
 
-			float penetrationDepthMeters = shape2->ComputePenetrationDepth(posInGridVoxel, localNormal, voxelSize2);
-
-			JPH::Vec3 inContactPointOn1 = worldPos;
-			JPH::Vec3 inContactPointOn2 = inContactPointOn1 + worldNormal * penetrationDepthMeters;
+			float penetrationDepthMeters = (inContactPointOn2 - inContactPointOn1).Dot(penetrationAxis);
 
 			JPH::CollideShapeResult result(
 					inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,

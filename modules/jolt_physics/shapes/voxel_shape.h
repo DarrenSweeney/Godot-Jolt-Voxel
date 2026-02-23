@@ -70,7 +70,6 @@ public:
 	}
 
 	JPH::Vec3 ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const;
-	float ComputePenetrationDepth(const JPH::Vec3 &posInGridVoxel, const JPH::Vec3 &localNormal, const JPH::Vec3 &voxelSize) const;
 
 	static void sCollidePointsVsGrid(
 			const VoxelShape *inPointsShape,
@@ -102,10 +101,14 @@ public:
 
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
 
-	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
-	bool CheckVoxelCollision(const JPH::Vec3 &voxelGridPos) const;
 
+	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
+
+	bool CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const;
+	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
+	JPH::Vec3 GetLocalPos(const JPH::Vec3 &argIndex) const;
+
 
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
@@ -120,8 +123,6 @@ public:
 	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override { return JPH::PhysicsMaterial::sDefault; }
 	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
 
-	// --- Must Implement: Collision Queries ---
-
 	// Empty implementation
 	virtual void CollideSoftBodyVertices(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::CollideSoftBodyVertexIterator &inVertices, JPH::uint inNumVertices, int inCollidingShapeIndex) const override {}
 	virtual bool CastRay(const JPH::RayCast &inRay, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::RayCastResult &ioHit) const override { return false; }
@@ -131,7 +132,6 @@ public:
 	virtual JPH::Shape::Stats GetStats() const override { return JPH::Shape::Stats(sizeof(*this), 0); }
 	virtual JPH::uint GetSubShapeIDBitsRecursive() const override { return 0; }
 
-	// --- Must Implement: Buoyancy ---
 	virtual void GetSubmergedVolume(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::Plane &inSurface, float &outTotalVolume, float &outSubmergedVolume, JPH::Vec3 &outCenterOfBuoyancy JPH_IF_DEBUG_RENDERER(, JPH::RVec3Arg inBaseOffset)) const override
 	{
 		outTotalVolume = GetVolume();
