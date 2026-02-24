@@ -59,6 +59,13 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 	int minY = (int)std::floor(voxelGridPos.GetY());
 	int minZ = (int)std::floor(voxelGridPos.GetZ());
 
+	if (IsSolidAt(voxelGridPos)) {
+		return true;
+	}
+
+	return false;
+	#if 0
+
 	for (int x = minX; x <= minX + 1; ++x)
 	{
 		for (int y = minY; y <= minY + 1; ++y)
@@ -77,6 +84,7 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 	}
 
 	return false;
+	#endif
 }
 
 JPH::Vec3 VoxelShape::ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const
@@ -134,6 +142,14 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
+	// If the point is outside the half-extents, it can't be in the grid
+	if (std::abs(argLocalPos.GetX()) > mHalfExtents.GetX() ||
+			std::abs(argLocalPos.GetY()) > mHalfExtents.GetY() ||
+			std::abs(argLocalPos.GetZ()) > mHalfExtents.GetZ()) {
+		// Return a sentinel value (like -1) to indicate "Outside"
+		return JPH::Vec3::sReplicate(-1.0f);
+	}
+
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
 	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
@@ -189,12 +205,16 @@ void VoxelShape::sCollidePointsVsGrid(
 
 			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
+			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
+			JPH::Vec3 pos2LocalSurface = pos2Local + localNormal * voxelSize2 * 0.5f;
+			JPH::Vec3 pos1LocalSurface = posLocal - localNormal * voxelSize1 * 0.5f;
+
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
 			JPH::Vec3 penetrationAxis = inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
 
-			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * posLocal;
-			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * pos2Local;
+			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * pos1LocalSurface;
+			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * pos2LocalSurface;
 
 			float penetrationDepthMeters = (inContactPointOn2 - inContactPointOn1).Dot(penetrationAxis);
 
