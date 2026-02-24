@@ -59,6 +59,7 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 	int minY = (int)std::floor(voxelGridPos.GetY());
 	int minZ = (int)std::floor(voxelGridPos.GetZ());
 
+	voxelGridPos = JPH::Vec3(minX, minY, minZ);
 	if (IsSolidAt(voxelGridPos)) {
 		return true;
 	}
@@ -206,8 +207,8 @@ void VoxelShape::sCollidePointsVsGrid(
 			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
 			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
+			JPH::Vec3 pos1LocalSurface = posLocal  - localNormal * voxelSize1 * 0.5f;
 			JPH::Vec3 pos2LocalSurface = pos2Local + localNormal * voxelSize2 * 0.5f;
-			JPH::Vec3 pos1LocalSurface = posLocal - localNormal * voxelSize1 * 0.5f;
 
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
