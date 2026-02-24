@@ -80,6 +80,7 @@ public:
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
 			bool inIsShape1ProvidingPoints,
+			const JPH::CollideShapeSettings &inCollideShapeSettings,
 			JPH::CollideShapeCollector &ioCollector);
 
 	static void sCollideVoxelVsVoxelLocal(
@@ -89,7 +90,7 @@ public:
 			JPH::Mat44Arg inCenterOfMassTransform2, // Transform for shape 2
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
-			const JPH::AABox &inIntersection, // The pre-calculated AABB intersection
+			const JPH::CollideShapeSettings &inCollideShapeSettings,
 			JPH::CollideShapeCollector &ioCollector // The Jolt collector
 	);
 

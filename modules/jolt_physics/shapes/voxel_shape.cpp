@@ -25,8 +25,7 @@ JPH::ShapeSettings::ShapeResult VoxelShapeSettings::Create() const
 void VoxelShape::CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator,
 		JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const
 {
-	print_line("VOXEL CollidePoint");
-	JPH_ASSERT(false);	// NOT IMPLEMENTED
+
 }
 
 int VoxelShape::GetIndex(uint32_t x, uint32_t y, uint32_t z) const
@@ -59,14 +58,14 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 	int minY = (int)std::floor(voxelGridPos.GetY());
 	int minZ = (int)std::floor(voxelGridPos.GetZ());
 
+#if 0
 	voxelGridPos = JPH::Vec3(minX, minY, minZ);
 	if (IsSolidAt(voxelGridPos)) {
 		return true;
 	}
 
 	return false;
-	#if 0
-
+#else
 	for (int x = minX; x <= minX + 1; ++x)
 	{
 		for (int y = minY; y <= minY + 1; ++y)
@@ -85,7 +84,7 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 	}
 
 	return false;
-	#endif
+#endif
 }
 
 JPH::Vec3 VoxelShape::ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const
@@ -143,6 +142,7 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
+#if 0
 	// If the point is outside the half-extents, it can't be in the grid
 	if (std::abs(argLocalPos.GetX()) > mHalfExtents.GetX() ||
 			std::abs(argLocalPos.GetY()) > mHalfExtents.GetY() ||
@@ -150,6 +150,7 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 		// Return a sentinel value (like -1) to indicate "Outside"
 		return JPH::Vec3::sReplicate(-1.0f);
 	}
+#endif
 
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
@@ -173,6 +174,7 @@ void VoxelShape::sCollidePointsVsGrid(
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
 		bool inIsShape1ProvidingPoints, // Logic flip to handle normal direction
+		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
 	// Derive voxel scaling from the actual shape dimensions
@@ -207,8 +209,8 @@ void VoxelShape::sCollidePointsVsGrid(
 			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
 			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
-			JPH::Vec3 pos1LocalSurface = posLocal  - localNormal * voxelSize1 * 0.5f;
-			JPH::Vec3 pos2LocalSurface = pos2Local + localNormal * voxelSize2 * 0.5f;
+			JPH::Vec3 pos1LocalSurface = posLocal -localNormal * (voxelSize1 * 0.5f);
+			JPH::Vec3 pos2LocalSurface = pos2Local + localNormal * (voxelSize2 * 0.5f);
 
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
@@ -217,7 +219,7 @@ void VoxelShape::sCollidePointsVsGrid(
 			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * pos1LocalSurface;
 			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * pos2LocalSurface;
 
-			float penetrationDepthMeters = (inContactPointOn2 - inContactPointOn1).Dot(penetrationAxis);
+			float penetrationDepthMeters = (inContactPointOn1 - inContactPointOn2).Dot(penetrationAxis);
 
 			JPH::CollideShapeResult result(
 					inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
@@ -236,7 +238,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 		JPH::Mat44Arg inCenterOfMassTransform2,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
-		const JPH::AABox &inIntersection,
+		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
 	// A's local points into B's local space
@@ -251,7 +253,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 			transform1To2,
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
-			true, ioCollector);
+			true, inCollideShapeSettings, ioCollector);
 
 #if 0
 	// Side B: Shape 2 corners vs Shape 1 grid
@@ -260,7 +262,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 			transform2To1,
 			inCenterOfMassTransform2, inCenterOfMassTransform1,
 			inSubShapeIDCreator2, inSubShapeIDCreator1,
-			false, ioCollector);
+			false, inCollideShapeSettings, ioCollector);
 #endif
 }
 
@@ -283,14 +285,7 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 	if (!shape1 || !shape2)
 		return;
 
-	// AABB check
-	JPH::AABox worldBounds1 = shape1->GetWorldSpaceBounds(inCenterOfMassTransform1, inScale1);
-	JPH::AABox worldBounds2 = shape2->GetWorldSpaceBounds(inCenterOfMassTransform2, inScale2);
-	JPH::AABox intersection = worldBounds1.Intersect(worldBounds2);
-	if (!intersection.IsValid()) 
-		return;
-
-	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, intersection, ioCollector);
+	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, inCollideShapeSettings, ioCollector);
 }
 
 void VoxelShape::sRegister()
