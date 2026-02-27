@@ -264,6 +264,34 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, inCollideShapeSettings, ioCollector);
 }
 
+JPH::MassProperties VoxelShape::GetMassProperties() const
+{
+	JPH::MassProperties p;
+	p.mMass = 1.0f; // @todo(Voxel): Can we read this from godot?
+
+	// Inertia for a solid box: (mass / 12) * (h^2 + d^2), etc.
+	// We use full extents (half * 2)
+	JPH::Vec3 size = mHalfExtents * 2.0f;
+	float mass_factor = p.mMass / 12.0f;
+
+	float x2 = size.GetX() * size.GetX();
+	float y2 = size.GetY() * size.GetY();
+	float z2 = size.GetZ() * size.GetZ();
+
+	p.mInertia = JPH::Mat44::sZero();
+	p.mInertia(0, 0) = mass_factor * (y2 + z2);
+	p.mInertia(1, 1) = mass_factor * (x2 + z2);
+	p.mInertia(2, 2) = mass_factor * (x2 + y2);
+	p.mInertia(3, 3) = 1.0f;
+
+	return p;
+}
+
+const JPH::PhysicsMaterial* VoxelShape::GetMaterial(const JPH::SubShapeID &inSubShapeID) const
+{
+	return JPH::PhysicsMaterial::sDefault;
+}
+
 void VoxelShape::sRegister()
 {
 	JPH::ShapeFunctions &f = JPH::ShapeFunctions::sGet(JoltCustomShapeSubType::VOXEL);

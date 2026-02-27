@@ -111,15 +111,9 @@ public:
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
 	virtual float GetInnerRadius() const override { return 0.0f; }
-	virtual JPH::MassProperties GetMassProperties() const override
-	{
-		JPH::MassProperties p;
-		p.mMass = 1.0f;
-		p.mInertia = JPH::Mat44::sIdentity();
-		return p;
-	}
-	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override { return JPH::PhysicsMaterial::sDefault; }
 	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
+	virtual JPH::MassProperties GetMassProperties() const override;
+	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override;
 
 	// Empty implementation
 	virtual void CollideSoftBodyVertices(JPH::Mat44Arg inCenterOfMassTransform, JPH::Vec3Arg inScale, const JPH::CollideSoftBodyVertexIterator &inVertices, JPH::uint inNumVertices, int inCollidingShapeIndex) const override {}
