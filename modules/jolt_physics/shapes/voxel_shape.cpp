@@ -87,49 +87,6 @@ bool VoxelShape::CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const
 #endif
 }
 
-JPH::Vec3 VoxelShape::ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const
-{
-	// Normalized position within the grid (0 to 1 per axis)
-	JPH::Vec3 normalized(
-			posInGridVoxel.GetX() / mResolution.GetX(),
-			posInGridVoxel.GetY() / mResolution.GetY(),
-			posInGridVoxel.GetZ() / mResolution.GetZ());
-
-	// Distance to each face (0 = min face, 1 = max face)
-	float distToMinX = normalized.GetX();
-	float distToMaxX = 1.0f - normalized.GetX();
-	float distToMinY = normalized.GetY();
-	float distToMaxY = 1.0f - normalized.GetY();
-	float distToMinZ = normalized.GetZ();
-	float distToMaxZ = 1.0f - normalized.GetZ();
-
-	// Find the closest face
-	float minDist = distToMinX;
-	JPH::Vec3 normal(-1, 0, 0);
-
-	if (distToMaxX < minDist) {
-		minDist = distToMaxX;
-		normal = JPH::Vec3(1, 0, 0);
-	}
-	if (distToMinY < minDist) {
-		minDist = distToMinY;
-		normal = JPH::Vec3(0, -1, 0);
-	}
-	if (distToMaxY < minDist) {
-		minDist = distToMaxY;
-		normal = JPH::Vec3(0, 1, 0);
-	}
-	if (distToMinZ < minDist) {
-		minDist = distToMinZ;
-		normal = JPH::Vec3(0, 0, -1);
-	}
-	if (distToMaxZ < minDist) {
-		normal = JPH::Vec3(0, 0, 1);
-	}
-
-	return normal;
-}
-
 JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 {
 	JPH::Vec3 halfOffset(0.5f, 0.5f, 0.5f);
@@ -202,11 +159,30 @@ void VoxelShape::sCollidePointsVsGrid(
 		// Map Shape 2 local space to its internal voxel grid coordinates
 		JPH::Vec3 posInGridVoxel = shape2->GetGridIndex(posInShape2Local);
 
+		// Calculate the norml for the penetration
+		// Normalize the position by the half-extents
+		// This turns your rectangle/pancake into a virtual 1x1x1 cube
+		JPH::Vec3 normalizedPos = posInShape2Local / shape2->mHalfExtents;
+
+		// The axis with the LARGEST normalized value is the face we are closest to
+		// even on a thin object.
+		int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
+		float sign = normalizedPos[axisIndex] > 0.0f ? 1.0f : -1.0f;
+
+		// Build your local penetration axis
+		JPH::Vec3 localPenetrationAxis = JPH::Vec3::sZero();
+		localPenetrationAxis.SetComponent(axisIndex, sign);
+
+		// Find the primary direction of this vector
+		int axisIndex_test = localPenetrationAxis.Abs().GetHighestComponentIndex();
+		float sign_test = localPenetrationAxis[axisIndex_test] > 0.0f ? 1.0f : -1.0f;
+
+		JPH::Vec3 localNormal = JPH::Vec3::sZero();
+		localNormal.SetComponent(axisIndex_test, sign_test);
+
 		if (shape2->CheckVoxelCollision(posInGridVoxel))
 		{
 			JPH::Vec3 pos2Local = shape2->GetLocalPos(posInGridVoxel);
-
-			JPH::Vec3 localNormal = shape2->ComputeVoxelNormal(posInGridVoxel);
 
 			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
 			JPH::Vec3 pos1LocalSurface = posLocal -localNormal * (voxelSize1 * 0.5f);

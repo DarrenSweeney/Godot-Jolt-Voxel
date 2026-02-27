@@ -69,8 +69,6 @@ public:
 		outResult.Set(this);
 	}
 
-	JPH::Vec3 ComputeVoxelNormal(const JPH::Vec3 &posInGridVoxel) const;
-
 	static void sCollidePointsVsGrid(
 			const VoxelShape *inPointsShape,
 			const VoxelShape *inGridShape,
@@ -109,7 +107,6 @@ public:
 	bool CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const;
 	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
 	JPH::Vec3 GetLocalPos(const JPH::Vec3 &argIndex) const;
-
 
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
