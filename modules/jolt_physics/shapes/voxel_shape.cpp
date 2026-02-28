@@ -197,12 +197,15 @@ void VoxelShape::sCollidePointsVsGrid(
 
 			float penetrationDepthMeters = (inContactPointOn1 - inContactPointOn2).Dot(penetrationAxis);
 
-			JPH::CollideShapeResult result(
-					inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
-					inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
-					JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
+			if (penetrationDepthMeters > 0)
+			{
+				JPH::CollideShapeResult result(
+						inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
+						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
+						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
-			ioCollector.AddHit(result);
+				ioCollector.AddHit(result);
+			}
 		}
 	}
 }
