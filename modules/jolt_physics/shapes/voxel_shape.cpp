@@ -211,7 +211,10 @@ void VoxelShape::sCollidePointsVsGrid(
 
 			float penetrationDepthMeters = (inContactPointOn1 - inContactPointOn2).Dot(penetrationAxis);
 
-			if (penetrationDepthMeters > 0)
+			// Check if the penetration is bigger than the early out fraction
+			bool no_contact = -penetrationDepthMeters >= ioCollector.GetEarlyOutFraction();
+
+			if (!no_contact) //penetrationDepthMeters > 0)
 			{
 				JPH::CollideShapeResult result(
 						inContactPointOn1, inContactPointOn2, penetration_axis_world, penetrationDepthMeters,
