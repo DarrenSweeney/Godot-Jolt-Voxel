@@ -123,8 +123,8 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 }
 
 void VoxelShape::sCollidePointsVsGrid(
-		const VoxelShape *shape1,
-		const VoxelShape *shape2,
+		const VoxelShape *shape1, const VoxelShape *shape2,
+		JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
 		JPH::Mat44Arg transform1To2,
 		JPH::Mat44Arg inCenterOfMassTransform1,
 		JPH::Mat44Arg inCenterOfMassTransform2,
@@ -144,6 +144,19 @@ void VoxelShape::sCollidePointsVsGrid(
 	// Corners that are in the voxel volume, in voxel grid space.
 	const uint8_t *corner_data = shape1->mVoxelCornerData;
 	int num_corners = (int)shape1->mVoxelCornerDataSize / 4;
+
+	// @todo(Voxel): This needs to be cleaned up.
+		JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
+		JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
+
+		JPH::Vec3 penetration_axis = transform_2_to_1.GetTranslation();
+
+		// Ensure that we do not pass in a near zero penetration axis
+		if (penetration_axis.IsNearZero()) {
+			penetration_axis = JPH::Vec3::sAxisX();
+		}
+
+		JPH::Vec3 penetration_axis_world = inCenterOfMassTransform1.Multiply3x3(penetration_axis);
 
 	for (int i = 0; i < num_corners; i++)
 	{
@@ -169,7 +182,8 @@ void VoxelShape::sCollidePointsVsGrid(
 		int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
 		float sign = normalizedPos[axisIndex] > 0.0f ? 1.0f : -1.0f;
 
-		// Build your local penetration axis
+		// @todo(Voxel): This needs to be cleaned up.
+		// Build local penetration axis
 		JPH::Vec3 localPenetrationAxis = JPH::Vec3::sZero();
 		localPenetrationAxis.SetComponent(axisIndex, sign);
 
@@ -200,9 +214,19 @@ void VoxelShape::sCollidePointsVsGrid(
 			if (penetrationDepthMeters > 0)
 			{
 				JPH::CollideShapeResult result(
-						inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
+						inContactPointOn1, inContactPointOn2, penetration_axis_world, penetrationDepthMeters,
 						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
 						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
+
+				// Gather faces
+				if (inCollideShapeSettings.mCollectFacesMode == JPH::ECollectFacesMode::CollectFaces)
+				{
+					// Get supporting face of shape 1
+					shape1->GetSupportingFace(JPH::SubShapeID(), -penetration_axis, inScale1, inCenterOfMassTransform1, result.mShape1Face);
+
+					// Get supporting face of shape 2
+					shape2->GetSupportingFace(JPH::SubShapeID(), transform_2_to_1.Multiply3x3Transposed(penetration_axis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
+				}
 
 				ioCollector.AddHit(result);
 			}
@@ -213,6 +237,7 @@ void VoxelShape::sCollidePointsVsGrid(
 void VoxelShape::sCollideVoxelVsVoxelLocal(
 		const VoxelShape *inShape1,
 		const VoxelShape *inShape2,
+		JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
 		JPH::Mat44Arg inCenterOfMassTransform1,
 		JPH::Mat44Arg inCenterOfMassTransform2,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
@@ -229,6 +254,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 	// Side A: Shape 1 corners vs Shape 2 grid
 	sCollidePointsVsGrid(
 			inShape1, inShape2,
+			inScale1, inScale2,
 			transform1To2,
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
@@ -238,6 +264,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 	// Side B: Shape 2 corners vs Shape 1 grid
 	sCollidePointsVsGrid(
 			inShape2, inShape1,
+			inScale1, inScale2,
 			transform2To1,
 			inCenterOfMassTransform2, inCenterOfMassTransform1,
 			inSubShapeIDCreator2, inSubShapeIDCreator1,
@@ -264,12 +291,13 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 	if (!shape1 || !shape2)
 		return;
 
-	sCollideVoxelVsVoxelLocal(shape1, shape2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, inCollideShapeSettings, ioCollector);
+	sCollideVoxelVsVoxelLocal(shape1, shape2, inScale1, inScale2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, inCollideShapeSettings, ioCollector);
 }
 
 JPH::MassProperties VoxelShape::GetMassProperties() const
 {
 	JPH::MassProperties p;
+#if 0
 	p.mMass = 1.0f; // @todo(Voxel): Can we read this from godot?
 
 	// Inertia for a solid box: (mass / 12) * (h^2 + d^2), etc.
@@ -286,13 +314,55 @@ JPH::MassProperties VoxelShape::GetMassProperties() const
 	p.mInertia(1, 1) = mass_factor * (x2 + z2);
 	p.mInertia(2, 2) = mass_factor * (x2 + y2);
 	p.mInertia(3, 3) = 1.0f;
+#endif
+
+	p.SetMassAndInertiaOfSolidBox(2.0f * mHalfExtents, GetDensity());
 
 	return p;
+}
+
+JPH::Vec3 VoxelShape::GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const
+{
+	JPH_ASSERT(inSubShapeID.IsEmpty(), "Invalid subshape ID");
+
+	// Get component that is closest to the surface of the box
+	int index = (inLocalSurfacePosition.Abs() - mHalfExtents).Abs().GetLowestComponentIndex();
+
+	// Calculate normal
+	JPH::Vec3 normal = JPH::Vec3::sZero();
+	normal.SetComponent(index, inLocalSurfacePosition[index] > 0.0f ? 1.0f : -1.0f);
+	return normal;
+}
+
+void VoxelShape::GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices) const
+{
+	JPH_ASSERT(inSubShapeID.IsEmpty(), "Invalid subshape ID");
+
+	JPH::Vec3 scaled_half_extent = inScale.Abs() * mHalfExtents;
+	JPH::AABox box(-scaled_half_extent, scaled_half_extent);
+	box.GetSupportingFace(inDirection, outVertices);
+
+	// Transform to world space
+	for (JPH::Vec3 &v : outVertices) {
+		v = inCenterOfMassTransform * v;
+	}
 }
 
 const JPH::PhysicsMaterial* VoxelShape::GetMaterial(const JPH::SubShapeID &inSubShapeID) const
 {
 	return JPH::PhysicsMaterial::sDefault;
+}
+
+// Set density of the shape (kg / m^3)
+void VoxelShape::SetDensity(float inDensity)
+{
+	mDensity = inDensity;
+}
+
+// Get density of the shape (kg / m^3)
+float VoxelShape::GetDensity() const
+{
+	return mDensity;
 }
 
 void VoxelShape::sRegister()

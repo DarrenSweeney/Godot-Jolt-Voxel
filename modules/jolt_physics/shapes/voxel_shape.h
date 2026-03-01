@@ -33,6 +33,7 @@ public:
 class VoxelShape : public JPH::Shape
 {
 public:
+	float mDensity = 1000.0f;
 	JPH::Vec3 mHalfExtents;
 	JPH::Vec3 mResolution;
 
@@ -44,6 +45,7 @@ public:
 
 	const uint8_t *mVoxelBitfieldData = nullptr;
 	size_t mVoxelBitfieldSize = 0;
+
 
 	VoxelShape() :
 			JPH::Shape(JPH::EShapeType::User1, JoltCustomShapeSubType::VOXEL) { }
@@ -72,6 +74,7 @@ public:
 	static void sCollidePointsVsGrid(
 			const VoxelShape *inPointsShape,
 			const VoxelShape *inGridShape,
+			JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
 			JPH::Mat44Arg inTransformPointsToGrid,
 			JPH::Mat44Arg inTransformPointsToWorld,
 			JPH::Mat44Arg inTransformGridToWorld,
@@ -84,6 +87,7 @@ public:
 	static void sCollideVoxelVsVoxelLocal(
 			const VoxelShape *inShape1, // The shape we are testing points FROM
 			const VoxelShape *inShape2, // The shape we are testing volume AGAINST
+			JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
 			JPH::Mat44Arg inCenterOfMassTransform1, // Transform for shape 1
 			JPH::Mat44Arg inCenterOfMassTransform2, // Transform for shape 2
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
@@ -108,10 +112,16 @@ public:
 	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
 	JPH::Vec3 GetLocalPos(const JPH::Vec3 &argIndex) const;
 
+	/// Set density of the shape (kg / m^3)
+	void SetDensity(float inDensity);
+	// Get density of the shape (kg / m^3)
+	float GetDensity() const;
+	
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
 	virtual float GetInnerRadius() const override { return 0.0f; }
-	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override { return JPH::Vec3::sAxisY(); }
+	virtual JPH::Vec3 GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inLocalSurfacePosition) const override;
+	virtual void GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices) const override;
 	virtual JPH::MassProperties GetMassProperties() const override;
 	virtual const JPH::PhysicsMaterial *GetMaterial(const JPH::SubShapeID &inSubShapeID) const override;
 
