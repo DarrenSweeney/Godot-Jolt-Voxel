@@ -11,6 +11,7 @@
 #include "Jolt/Physics/Collision/Shape/DecoratedShape.h"
 #include "Jolt/Physics/Collision/CollisionDispatch.h"
 
+#include <Jolt/Geometry/RayAABox.h>
 
 // --- VoxelShapeSettings -- 
 JPH::ShapeSettings::ShapeResult VoxelShapeSettings::Create() const
@@ -248,6 +249,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
+	// @todo(Voxel): Cleanup. Can calculate this inside sCollidePointsVsGrid
 	// A's local points into B's local space
 	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
 
@@ -263,6 +265,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
 			true, inCollideShapeSettings, ioCollector);
 
+	// @todo(Voxel): Don't think this is needed anymore now, saves some perf which is nice.
 #if 0
 	// Side B: Shape 2 corners vs Shape 1 grid
 	sCollidePointsVsGrid(
@@ -295,6 +298,53 @@ void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Sha
 		return;
 
 	sCollideVoxelVsVoxelLocal(shape1, shape2, inScale1, inScale2, inCenterOfMassTransform1, inCenterOfMassTransform2, inSubShapeIDCreator1, inSubShapeIDCreator2, inCollideShapeSettings, ioCollector);
+}
+
+// For ray casting we just do it against the bounding box. We don't need to know about the voxel level here
+bool VoxelShape::CastRay(const JPH::RayCast &inRay, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::RayCastResult &ioHit) const
+{
+	// Test hit against box
+	float fraction = JPH::max(JPH::RayAABox(inRay.mOrigin, JPH::RayInvDirection(inRay.mDirection), -mHalfExtents, mHalfExtents), 0.0f);
+	if (fraction < ioHit.mFraction)
+	{
+		ioHit.mFraction = fraction;
+		ioHit.mSubShapeID2 = inSubShapeIDCreator.GetID();
+		return true;
+	}
+	return false;
+}
+
+void VoxelShape::CastRay(const JPH::RayCast &inRay, const JPH::RayCastSettings &inRayCastSettings, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CastRayCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const
+{
+	// Test shape filter
+	if (!inShapeFilter.ShouldCollide(this, inSubShapeIDCreator.GetID()))
+		return;
+
+	float min_fraction, max_fraction;
+	JPH::RayAABox(inRay.mOrigin, JPH::RayInvDirection(inRay.mDirection), -mHalfExtents, mHalfExtents, min_fraction, max_fraction);
+	if (min_fraction <= max_fraction // Ray should intersect
+			&& max_fraction >= 0.0f // End of ray should be inside box
+			&& min_fraction < ioCollector.GetEarlyOutFraction()) // Start of ray should be before early out fraction
+	{
+		// Better hit than the current hit
+		JPH::RayCastResult hit;
+		hit.mBodyID = JPH::TransformedShape::sGetBodyID(ioCollector.GetContext());
+		hit.mSubShapeID2 = inSubShapeIDCreator.GetID();
+
+		// Check front side
+		if (inRayCastSettings.mTreatConvexAsSolid || min_fraction > 0.0f)
+		{
+			hit.mFraction = JPH::max(0.0f, min_fraction);
+			ioCollector.AddHit(hit);
+		}
+
+		// Check back side hit
+		if (inRayCastSettings.mBackFaceModeConvex == JPH::EBackFaceMode::CollideWithBackFaces && max_fraction < ioCollector.GetEarlyOutFraction())
+		{
+			hit.mFraction = max_fraction;
+			ioCollector.AddHit(hit);
+		}
+	}
 }
 
 JPH::MassProperties VoxelShape::GetMassProperties() const
