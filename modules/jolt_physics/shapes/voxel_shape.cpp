@@ -139,9 +139,6 @@ void VoxelShape::sCollidePointsVsGrid(
 	JPH::Vec3 voxelSize1 = (shape1->mHalfExtents * 2.0f) / shape1->mResolution;
 	JPH::Vec3 voxelSize2 = (shape2->mHalfExtents * 2.0f) / shape2->mResolution;
 
-	// This is the conversion factor for the target grid
-	JPH::Vec3 invVoxelSize2 = JPH::Vec3(1.0f / voxelSize2.GetX(), 1.0f / voxelSize2.GetY(), 1.0f / voxelSize2.GetZ());
-
 	// Corners that are in the voxel volume, in voxel grid space.
 	const uint8_t *corner_data = shape1->mVoxelCornerData;
 	int num_corners = (int)shape1->mVoxelCornerDataSize / 4;
@@ -153,7 +150,8 @@ void VoxelShape::sCollidePointsVsGrid(
 	for (int i = 0; i < num_corners; i++)
 	{
 		// Position of the voxel in voxel grid space. Ranges from 0 to mResolution.axis
-		JPH::Vec3 posVoxel((float)corner_data[i * 4 + 0], (float)corner_data[i * 4 + 1], (float)corner_data[i * 4 + 2]);
+		int baseIndex = i * 4;
+        JPH::Vec3 posVoxel((float)corner_data[baseIndex], (float)corner_data[baseIndex + 1], (float)corner_data[baseIndex + 2]);
 
 		// Voxel space to local space for shape 1
 		JPH::Vec3 posLocal = shape1->GetLocalPos(posVoxel);
@@ -169,22 +167,23 @@ void VoxelShape::sCollidePointsVsGrid(
 		// This turns your rectangle/pancake into a virtual 1x1x1 cube
 		JPH::Vec3 normalizedPos = posInShape2Local / shape2->mHalfExtents;
 
-		// The axis with the LARGEST normalized value is the face we are closest to
-		// even on a thin object.
-		int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
-		float sign = normalizedPos[axisIndex] > 0.0f ? 1.0f : -1.0f;
+		// @continue(Darren): Cleanup
+			// The axis with the LARGEST normalized value is the face we are closest to
+			// even on a thin object.
+			int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
+			float sign = normalizedPos[axisIndex] > 0.0f ? 1.0f : -1.0f;
 
-		// @todo(Voxel): This needs to be cleaned up.
-		// Build local penetration axis
-		JPH::Vec3 localPenetrationAxis = JPH::Vec3::sZero();
-		localPenetrationAxis.SetComponent(axisIndex, sign);
+			// @todo(Voxel): This needs to be cleaned up.
+			// Build local penetration axis
+			JPH::Vec3 localPenetrationAxis = JPH::Vec3::sZero();
+			localPenetrationAxis.SetComponent(axisIndex, sign);
 
-		// Find the primary direction of this vector
-		int axisIndex_test = localPenetrationAxis.Abs().GetHighestComponentIndex();
-		float sign_test = localPenetrationAxis[axisIndex_test] > 0.0f ? 1.0f : -1.0f;
+			// Find the primary direction of this vector
+			int axisIndex_test = localPenetrationAxis.Abs().GetHighestComponentIndex();
+			float sign_test = localPenetrationAxis[axisIndex_test] > 0.0f ? 1.0f : -1.0f;
 
-		JPH::Vec3 localNormal = JPH::Vec3::sZero();
-		localNormal.SetComponent(axisIndex_test, sign_test);
+			JPH::Vec3 localNormal = JPH::Vec3::sZero();
+			localNormal.SetComponent(axisIndex_test, sign_test);
 
 		if (shape2->CheckVoxelCollision(posInGridVoxel))
 		{
@@ -204,9 +203,7 @@ void VoxelShape::sCollidePointsVsGrid(
 			float penetrationDepthMeters = (inContactPointOn1 - inContactPointOn2).Dot(penetrationAxis);
 
 			// Check if the penetration is bigger than the early out fraction
-			bool no_contact = -penetrationDepthMeters >= ioCollector.GetEarlyOutFraction();
-
-			if (!no_contact)
+			if (-penetrationDepthMeters < ioCollector.GetEarlyOutFraction())
 			{
 				JPH::CollideShapeResult result(
 						inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
@@ -340,26 +337,9 @@ void VoxelShape::CastRay(const JPH::RayCast &inRay, const JPH::RayCastSettings &
 
 JPH::MassProperties VoxelShape::GetMassProperties() const
 {
+	// Treat the inertia like it's a box, rigid bodies should have their bounding
+	// volume be somewhat tight around the voxels
 	JPH::MassProperties p;
-#if 0
-	p.mMass = 1.0f; // @todo(Voxel): Can we read this from godot?
-
-	// Inertia for a solid box: (mass / 12) * (h^2 + d^2), etc.
-	// We use full extents (half * 2)
-	JPH::Vec3 size = mHalfExtents * 2.0f;
-	float mass_factor = p.mMass / 12.0f;
-
-	float x2 = size.GetX() * size.GetX();
-	float y2 = size.GetY() * size.GetY();
-	float z2 = size.GetZ() * size.GetZ();
-
-	p.mInertia = JPH::Mat44::sZero();
-	p.mInertia(0, 0) = mass_factor * (y2 + z2);
-	p.mInertia(1, 1) = mass_factor * (x2 + z2);
-	p.mInertia(2, 2) = mass_factor * (x2 + y2);
-	p.mInertia(3, 3) = 1.0f;
-#endif
-
 	p.SetMassAndInertiaOfSolidBox(2.0f * mHalfExtents, GetDensity());
 
 	return p;
