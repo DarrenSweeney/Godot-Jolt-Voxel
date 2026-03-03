@@ -150,15 +150,6 @@ void VoxelShape::sCollidePointsVsGrid(
 		JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
 		JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
 
-		JPH::Vec3 penetration_axis = transform_2_to_1.GetTranslation();
-
-		// Ensure that we do not pass in a near zero penetration axis
-		if (penetration_axis.IsNearZero()) {
-			penetration_axis = JPH::Vec3::sAxisX();
-		}
-
-		JPH::Vec3 penetration_axis_world = inCenterOfMassTransform1.Multiply3x3(penetration_axis);
-
 	for (int i = 0; i < num_corners; i++)
 	{
 		// Position of the voxel in voxel grid space. Ranges from 0 to mResolution.axis
@@ -215,10 +206,10 @@ void VoxelShape::sCollidePointsVsGrid(
 			// Check if the penetration is bigger than the early out fraction
 			bool no_contact = -penetrationDepthMeters >= ioCollector.GetEarlyOutFraction();
 
-			if (!no_contact) //penetrationDepthMeters > 0)
+			if (!no_contact)
 			{
 				JPH::CollideShapeResult result(
-						inContactPointOn1, inContactPointOn2, penetration_axis_world, penetrationDepthMeters,
+						inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
 						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
 						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
@@ -226,10 +217,10 @@ void VoxelShape::sCollidePointsVsGrid(
 				if (inCollideShapeSettings.mCollectFacesMode == JPH::ECollectFacesMode::CollectFaces)
 				{
 					// Get supporting face of shape 1
-					shape1->GetSupportingFace(JPH::SubShapeID(), -penetration_axis, inScale1, inCenterOfMassTransform1, result.mShape1Face);
+					shape1->GetSupportingFace(JPH::SubShapeID(), -penetrationAxis, inScale1, inCenterOfMassTransform1, result.mShape1Face);
 
 					// Get supporting face of shape 2
-					shape2->GetSupportingFace(JPH::SubShapeID(), transform_2_to_1.Multiply3x3Transposed(penetration_axis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
+					shape2->GetSupportingFace(JPH::SubShapeID(), transform_2_to_1.Multiply3x3Transposed(penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
 				}
 
 				ioCollector.AddHit(result);
