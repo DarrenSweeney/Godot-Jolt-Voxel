@@ -10,7 +10,10 @@
 #include <Jolt/Physics/Collision/Shape/ScaleHelpers.h>
 #include <Jolt/Physics/Collision/Shape/GetTrianglesContext.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
+
+#ifdef JPH_DEBUG_RENDERER
 #include <Jolt/Renderer/DebugRenderer.h>
+#endif
 
 #include "jolt_custom_shape_type.h"
 
