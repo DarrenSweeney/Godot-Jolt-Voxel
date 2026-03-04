@@ -172,11 +172,13 @@ void VoxelShape::sCollidePointsVsGrid(
 		JPH::Mat44Arg inCenterOfMassTransform2,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
-		bool inIsShape1ProvidingPoints, // Logic flip to handle normal direction
 		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
 	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
+
+	JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
+	JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
 
 	// Derive voxel scaling from the actual shape dimensions
 	JPH::Vec3 voxelSize1 = (shape1->mHalfExtents * 2.0f) / shape1->mResolution;
@@ -185,10 +187,6 @@ void VoxelShape::sCollidePointsVsGrid(
 	// Corners that are in the voxel volume, in voxel grid space.
 	const uint8_t *cornerDataShape1 = shape1->mVoxelCornerData;
 	int numCornersShape1 = (int)shape1->mVoxelCornerDataSize / 4;
-
-	// @todo(Voxel): This needs to be cleaned up.
-		JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
-		JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
 
 	for (int i = 0; i < numCornersShape1; i++)
 	{
@@ -203,55 +201,33 @@ void VoxelShape::sCollidePointsVsGrid(
 		JPH::Vec3 posInShape2Local = transform1To2 * posLocalShape1;
 
 		// Map Shape 2 local space to its internal voxel grid coordinates
-		JPH::Vec3 posInGridVoxel = shape2->GetGridIndex(posInShape2Local);
+		JPH::Vec3 gridPosVoxelShape2 = shape2->GetGridIndex(posInShape2Local);
 
-		if (shape2->CheckVoxelCollision(posInGridVoxel))
+		if (shape2->CheckVoxelCollision(gridPosVoxelShape2))
 		{
-			JPH::Vec3 posLocalShape2 = shape2->GetLocalPos(posInGridVoxel);
+			JPH::Vec3 posLocalShape2 = shape2->GetLocalPos(gridPosVoxelShape2);
 
+			// Conver to world space
+			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * posLocalShape1;
+			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * posLocalShape2;
 
+			// Calculate the vector pointing from point on shape 2 to point on shape 1
+			JPH::Vec3 separation = inContactPointOn1 - inContactPointOn2;
 
+			// The length of this vector represents the penetration depth
+			float penetrationDepthMeters = (separation).Length();
 
-			// Calculate the norml for the penetration
-			// Normalize the position by the half-extents
-			// This turns your rectangle/pancake into a virtual 1x1x1 cube
-			JPH::Vec3 normalizedPos = posLocalShape2 / shape2->mHalfExtents;
+			// Initialize the axis to a zero vector as a fallback
+			JPH::Vec3 penetrationAxis = JPH::Vec3::sZero();
 
-			// @continue(Darren): Cleanup
-			// The axis with the LARGEST normalized value is the face we are closest to
-			// even on a thin object.
-			int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
-			float sign = normalizedPos[axisIndex] > 0.0f ? 1.0f : -1.0f;
-
-			// @todo(Voxel): This needs to be cleaned up.
-			// Build local penetration axis
-			JPH::Vec3 localPenetrationAxis = JPH::Vec3::sZero();
-			localPenetrationAxis.SetComponent(axisIndex, sign);
-
-			// Find the primary direction of this vector
-			int axisIndex_test = localPenetrationAxis.Abs().GetHighestComponentIndex();
-			float sign_test = localPenetrationAxis[axisIndex_test] > 0.0f ? 1.0f : -1.0f;
-
-			JPH::Vec3 localNormal = JPH::Vec3::sZero();
-			localNormal.SetComponent(axisIndex_test, sign_test);
-
-
-
-
-
-			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
-			// @continue(Darren): Need to transform the local normal or calcualte for other shape, dont minus and plus, math should be the same.
-			JPH::Vec3 pos1LocalSurface = posLocalShape1 - localNormal * (voxelSize1 * 0.5f);
-			JPH::Vec3 pos2LocalSurface = posLocalShape2 + localNormal * (voxelSize2 * 0.5f);
-
-			// Transform normal to World Space
-			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
-			JPH::Vec3 penetrationAxis = inIsShape1ProvidingPoints ? -worldNormal : worldNormal;
-
-			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * pos1LocalSurface;
-			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * pos2LocalSurface;
-
-			float penetrationDepthMeters = (inContactPointOn1 - inContactPointOn2).Dot(penetrationAxis);
+			// Check if the penetration depth is larger than the smallest representable float
+			if (penetrationDepthMeters > 1.e-6f)
+			{
+				// Divide the vector by its own length to get a unit vector (length of one)
+				penetrationAxis = separation / penetrationDepthMeters;
+			}
+			
+			penetrationAxis = -penetrationAxis;
 
 			// Check if the penetration is bigger than the early out fraction
 			if (-penetrationDepthMeters < ioCollector.GetEarlyOutFraction())
@@ -294,7 +270,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 			inScale1, inScale2,
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
-			true, inCollideShapeSettings, ioCollector);
+			inCollideShapeSettings, ioCollector);
 }
 
 void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,

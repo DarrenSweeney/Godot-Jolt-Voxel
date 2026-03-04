@@ -82,7 +82,6 @@ public:
 			JPH::Mat44Arg inTransformGridToWorld,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator2,
-			bool inIsShape1ProvidingPoints,
 			const JPH::CollideShapeSettings &inCollideShapeSettings,
 			JPH::CollideShapeCollector &ioCollector);
 
