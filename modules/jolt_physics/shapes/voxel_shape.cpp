@@ -168,7 +168,6 @@ JPH::Vec3 VoxelShape::FindSurfaceVoxel(JPH::Vec3 solidVoxelPos, JPH::Vec3 localP
 void VoxelShape::sCollidePointsVsGrid(
 		const VoxelShape *shape1, const VoxelShape *shape2,
 		JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
-		JPH::Mat44Arg transform1To2,
 		JPH::Mat44Arg inCenterOfMassTransform1,
 		JPH::Mat44Arg inCenterOfMassTransform2,
 		const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
@@ -177,6 +176,8 @@ void VoxelShape::sCollidePointsVsGrid(
 		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
+	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
+
 	// Derive voxel scaling from the actual shape dimensions
 	JPH::Vec3 voxelSize1 = (shape1->mHalfExtents * 2.0f) / shape1->mResolution;
 	JPH::Vec3 voxelSize2 = (shape2->mHalfExtents * 2.0f) / shape2->mResolution;
@@ -287,15 +288,10 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
-	// @todo(Voxel): Cleanup. Can calculate this inside sCollidePointsVsGrid
-	// A's local points into B's local space
-	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
-
 	// Shape 1 corners vs Shape 2 grid
 	sCollidePointsVsGrid(
 			inShape1, inShape2,
 			inScale1, inScale2,
-			transform1To2,
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
 			true, inCollideShapeSettings, ioCollector);

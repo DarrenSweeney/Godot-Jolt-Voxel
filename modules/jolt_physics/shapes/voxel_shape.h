@@ -78,7 +78,6 @@ public:
 			const VoxelShape *inPointsShape,
 			const VoxelShape *inGridShape,
 			JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
-			JPH::Mat44Arg inTransformPointsToGrid,
 			JPH::Mat44Arg inTransformPointsToWorld,
 			JPH::Mat44Arg inTransformGridToWorld,
 			const JPH::SubShapeIDCreator &inSubShapeIDCreator1,
