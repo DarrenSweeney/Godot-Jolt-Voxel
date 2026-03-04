@@ -123,6 +123,48 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 	return clampedIndex;
 }
 
+// NOTE: Unused right now, might be useful later for finding the surface voxel along a direction
+JPH::Vec3 VoxelShape::FindSurfaceVoxel(JPH::Vec3 solidVoxelPos, JPH::Vec3 localPenetrationAxis) const
+{
+	// Convert the world-space penetration axis into a grid-space step direction.
+	// The axis is already in shape2's local space, so we can map it to grid steps.
+	// We step one voxel at a time along the dominant axis.
+	JPH::Vec3 voxelSize = (mHalfExtents * 2.0f) / mResolution;
+
+	// Convert local-space axis to grid-space axis (divide by voxel size)
+	JPH::Vec3 gridStep = localPenetrationAxis / voxelSize;
+
+	// Clamp to unit steps per axis — we move one voxel at a time
+	gridStep = JPH::Vec3(
+			gridStep.GetX() != 0.0f ? (gridStep.GetX() > 0.0f ? 1.0f : -1.0f) : 0.0f,
+			gridStep.GetY() != 0.0f ? (gridStep.GetY() > 0.0f ? 1.0f : -1.0f) : 0.0f,
+			gridStep.GetZ() != 0.0f ? (gridStep.GetZ() > 0.0f ? 1.0f : -1.0f) : 0.0f);
+
+	// Only step along the dominant axis (matches how localNormal is computed)
+	int axisIndex = localPenetrationAxis.Abs().GetHighestComponentIndex();
+	JPH::Vec3 dominantStep = JPH::Vec3::sZero();
+	dominantStep.SetComponent(axisIndex, gridStep[axisIndex]);
+
+	JPH::Vec3 current = JPH::Vec3(
+			std::floor(solidVoxelPos.GetX()),
+			std::floor(solidVoxelPos.GetY()),
+			std::floor(solidVoxelPos.GetZ()));
+
+	// Walk outward (in the penetration direction) until we leave solid voxels
+	// Cap iterations to the resolution to avoid infinite loops
+	int maxSteps = (int)mResolution[axisIndex] + 1;
+	for (int step = 0; step < maxSteps; ++step)
+	{
+		JPH::Vec3 next = current + dominantStep;
+		if (!IsSolidAt(next))
+			break; // current is the surface voxel
+
+		current = next;
+	}
+
+	return current;
+}
+
 void VoxelShape::sCollidePointsVsGrid(
 		const VoxelShape *shape1, const VoxelShape *shape2,
 		JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,
@@ -140,34 +182,41 @@ void VoxelShape::sCollidePointsVsGrid(
 	JPH::Vec3 voxelSize2 = (shape2->mHalfExtents * 2.0f) / shape2->mResolution;
 
 	// Corners that are in the voxel volume, in voxel grid space.
-	const uint8_t *corner_data = shape1->mVoxelCornerData;
-	int num_corners = (int)shape1->mVoxelCornerDataSize / 4;
+	const uint8_t *cornerDataShape1 = shape1->mVoxelCornerData;
+	int numCornersShape1 = (int)shape1->mVoxelCornerDataSize / 4;
 
 	// @todo(Voxel): This needs to be cleaned up.
 		JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
 		JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
 
-	for (int i = 0; i < num_corners; i++)
+	for (int i = 0; i < numCornersShape1; i++)
 	{
 		// Position of the voxel in voxel grid space. Ranges from 0 to mResolution.axis
 		int baseIndex = i * 4;
-        JPH::Vec3 posVoxel((float)corner_data[baseIndex], (float)corner_data[baseIndex + 1], (float)corner_data[baseIndex + 2]);
+		JPH::Vec3 gridPosVoxelShape1((float)cornerDataShape1[baseIndex], (float)cornerDataShape1[baseIndex + 1], (float)cornerDataShape1[baseIndex + 2]);
 
-		// Voxel space to local space for shape 1
-		JPH::Vec3 posLocal = shape1->GetLocalPos(posVoxel);
+		// Voxel grid space to local space for shape 1
+		JPH::Vec3 posLocalShape1 = shape1->GetLocalPos(gridPosVoxelShape1);
 
 		// Move the point into Shape 2 local space
-		JPH::Vec3 posInShape2Local = transform1To2 * posLocal;
+		JPH::Vec3 posInShape2Local = transform1To2 * posLocalShape1;
 
 		// Map Shape 2 local space to its internal voxel grid coordinates
 		JPH::Vec3 posInGridVoxel = shape2->GetGridIndex(posInShape2Local);
 
-		// Calculate the norml for the penetration
-		// Normalize the position by the half-extents
-		// This turns your rectangle/pancake into a virtual 1x1x1 cube
-		JPH::Vec3 normalizedPos = posInShape2Local / shape2->mHalfExtents;
+		if (shape2->CheckVoxelCollision(posInGridVoxel))
+		{
+			JPH::Vec3 posLocalShape2 = shape2->GetLocalPos(posInGridVoxel);
 
-		// @continue(Darren): Cleanup
+
+
+
+			// Calculate the norml for the penetration
+			// Normalize the position by the half-extents
+			// This turns your rectangle/pancake into a virtual 1x1x1 cube
+			JPH::Vec3 normalizedPos = posLocalShape2 / shape2->mHalfExtents;
+
+			// @continue(Darren): Cleanup
 			// The axis with the LARGEST normalized value is the face we are closest to
 			// even on a thin object.
 			int axisIndex = normalizedPos.Abs().GetHighestComponentIndex();
@@ -185,13 +234,14 @@ void VoxelShape::sCollidePointsVsGrid(
 			JPH::Vec3 localNormal = JPH::Vec3::sZero();
 			localNormal.SetComponent(axisIndex_test, sign_test);
 
-		if (shape2->CheckVoxelCollision(posInGridVoxel))
-		{
-			JPH::Vec3 pos2Local = shape2->GetLocalPos(posInGridVoxel);
+
+
+
 
 			// Offset the positions by half a voxel along the normal direction to get the surface contact point in local space.
-			JPH::Vec3 pos1LocalSurface = posLocal -localNormal * (voxelSize1 * 0.5f);
-			JPH::Vec3 pos2LocalSurface = pos2Local + localNormal * (voxelSize2 * 0.5f);
+			// @continue(Darren): Need to transform the local normal or calcualte for other shape, dont minus and plus, math should be the same.
+			JPH::Vec3 pos1LocalSurface = posLocalShape1 - localNormal * (voxelSize1 * 0.5f);
+			JPH::Vec3 pos2LocalSurface = posLocalShape2 + localNormal * (voxelSize2 * 0.5f);
 
 			// Transform normal to World Space
 			JPH::Vec3 worldNormal = inCenterOfMassTransform2.Multiply3x3(localNormal);
@@ -241,10 +291,7 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 	// A's local points into B's local space
 	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
 
-	// B's local points into A's local space
-	JPH::Mat44 transform2To1 = inCenterOfMassTransform1.Inversed() * inCenterOfMassTransform2;
-
-	// Side A: Shape 1 corners vs Shape 2 grid
+	// Shape 1 corners vs Shape 2 grid
 	sCollidePointsVsGrid(
 			inShape1, inShape2,
 			inScale1, inScale2,
@@ -252,18 +299,6 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
 			true, inCollideShapeSettings, ioCollector);
-
-	// @todo(Voxel): Don't think this is needed anymore now, saves some perf which is nice.
-#if 0
-	// Side B: Shape 2 corners vs Shape 1 grid
-	sCollidePointsVsGrid(
-			inShape2, inShape1,
-			inScale1, inScale2,
-			transform2To1,
-			inCenterOfMassTransform2, inCenterOfMassTransform1,
-			inSubShapeIDCreator2, inSubShapeIDCreator1,
-			false, inCollideShapeSettings, ioCollector);
-#endif
 }
 
 void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,

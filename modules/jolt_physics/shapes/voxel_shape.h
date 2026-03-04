@@ -112,8 +112,9 @@ public:
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
 
 	bool CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const;
-	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
 	JPH::Vec3 GetLocalPos(const JPH::Vec3 &argIndex) const;
+	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
+	JPH::Vec3 FindSurfaceVoxel(JPH::Vec3 solidVoxelPos, JPH::Vec3 localPenetrationAxis) const;
 
 	/// Set density of the shape (kg / m^3)
 	void SetDensity(float inDensity);
