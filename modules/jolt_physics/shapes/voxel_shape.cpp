@@ -177,13 +177,6 @@ void VoxelShape::sCollidePointsVsGrid(
 {
 	JPH::Mat44 transform1To2 = inCenterOfMassTransform2.Inversed() * inCenterOfMassTransform1;
 
-	JPH::Mat44 inverse_transform1 = inCenterOfMassTransform1.InversedRotationTranslation();
-	JPH::Mat44 transform_2_to_1 = inverse_transform1 * inCenterOfMassTransform2;
-
-	// Derive voxel scaling from the actual shape dimensions
-	JPH::Vec3 voxelSize1 = (shape1->mHalfExtents * 2.0f) / shape1->mResolution;
-	JPH::Vec3 voxelSize2 = (shape2->mHalfExtents * 2.0f) / shape2->mResolution;
-
 	// Corners that are in the voxel volume, in voxel grid space.
 	const uint8_t *cornerDataShape1 = shape1->mVoxelCornerData;
 	int numCornersShape1 = (int)shape1->mVoxelCornerDataSize / 4;
@@ -215,7 +208,7 @@ void VoxelShape::sCollidePointsVsGrid(
 			JPH::Vec3 separation = inContactPointOn1 - inContactPointOn2;
 
 			// The length of this vector represents the penetration depth
-			float penetrationDepthMeters = (separation).Length();
+			float penetrationDepthMeters = separation.Length();
 
 			// Initialize the axis to a zero vector as a fallback
 			JPH::Vec3 penetrationAxis = JPH::Vec3::sZero();
@@ -226,25 +219,23 @@ void VoxelShape::sCollidePointsVsGrid(
 				// Divide the vector by its own length to get a unit vector (length of one)
 				penetrationAxis = separation / penetrationDepthMeters;
 			}
-			
-			penetrationAxis = -penetrationAxis;
 
 			// Check if the penetration is bigger than the early out fraction
 			if (-penetrationDepthMeters < ioCollector.GetEarlyOutFraction())
 			{
 				JPH::CollideShapeResult result(
-						inContactPointOn1, inContactPointOn2, penetrationAxis, penetrationDepthMeters,
+						inContactPointOn1, inContactPointOn2, -penetrationAxis, penetrationDepthMeters,
 						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
-						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
+						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));	
 
 				// Gather faces
 				if (inCollideShapeSettings.mCollectFacesMode == JPH::ECollectFacesMode::CollectFaces)
 				{
 					// Get supporting face of shape 1
-					shape1->GetSupportingFace(JPH::SubShapeID(), -penetrationAxis, inScale1, inCenterOfMassTransform1, result.mShape1Face);
+					shape1->GetSupportingFace(JPH::SubShapeID(), inCenterOfMassTransform1.Multiply3x3Transposed(penetrationAxis), inScale1, inCenterOfMassTransform1, result.mShape1Face);
 
 					// Get supporting face of shape 2
-					shape2->GetSupportingFace(JPH::SubShapeID(), transform_2_to_1.Multiply3x3Transposed(penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
+					shape2->GetSupportingFace(JPH::SubShapeID(), inCenterOfMassTransform2.Multiply3x3Transposed(-penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
 				}
 
 				ioCollector.AddHit(result);

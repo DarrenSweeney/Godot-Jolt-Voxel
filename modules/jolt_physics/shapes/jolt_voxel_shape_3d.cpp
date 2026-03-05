@@ -12,9 +12,6 @@ JPH::ShapeRefC JoltVoxelShape3D::_build() const
 	const float min_half_extent = (float)size[size.min_axis_index()];
 	const float actual_margin = MIN(margin, min_half_extent * JoltProjectSettings::collision_margin_fraction);
 
-#if 0
-	const JPH::BoxShapeSettings shape_settings(to_jolt(size), actual_margin);
-#else
 	VoxelShapeSettings shape_settings;
 	shape_settings.half_extents = to_jolt(size);
 	shape_settings.resolution = JPH::Vec3((float)resolution.x, (float)resolution.y, (float)resolution.z);
@@ -27,8 +24,6 @@ JPH::ShapeRefC JoltVoxelShape3D::_build() const
 
 	shape_settings.voxel_bitfield_data = voxel_bitfield_data.ptr();
 	shape_settings.voxel_bitfield_data_size = (size_t)voxel_bitfield_data.size();
-#endif
-
 
 	const JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
 	ERR_FAIL_COND_V_MSG(shape_result.HasError(), nullptr, vformat("Failed to build Jolt Physics voxel shape with %s. It returned the following error: '%s'. This shape belongs to %s.", to_string(), to_godot(shape_result.GetError()), _owners_to_string()));
@@ -53,7 +48,7 @@ void JoltVoxelShape3D::set_data(const Variant &p_data)
 	//if (new_half_extents == size && new_resolution == resolution) //&& new_data == voxel_data) 
 		//return;
 
-	size = new_half_extents; // This is actually half_extents based on your Godot code
+	size = new_half_extents;
 	resolution = new_resolution;
 
 	voxel_corner_data = voxel_corners;
