@@ -9,8 +9,6 @@
 
 JPH::ShapeRefC JoltVoxelShape3D::_build() const
 {
-	const float min_half_extent = (float)size[size.min_axis_index()];
-
 	VoxelShapeSettings shape_settings;
 	shape_settings.half_extents = to_jolt(size);
 	shape_settings.resolution = JPH::Vec3((float)resolution.x, (float)resolution.y, (float)resolution.z);
