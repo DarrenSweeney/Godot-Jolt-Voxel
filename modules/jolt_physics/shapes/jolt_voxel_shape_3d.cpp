@@ -10,7 +10,6 @@
 JPH::ShapeRefC JoltVoxelShape3D::_build() const
 {
 	const float min_half_extent = (float)size[size.min_axis_index()];
-	const float actual_margin = MIN(margin, min_half_extent * JoltProjectSettings::collision_margin_fraction);
 
 	VoxelShapeSettings shape_settings;
 	shape_settings.half_extents = to_jolt(size);
