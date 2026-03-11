@@ -22,6 +22,9 @@ JPH::ShapeRefC JoltVoxelShape3D::_build() const
 	shape_settings.voxel_bitfield_data = voxel_bitfield_data.ptr();
 	shape_settings.voxel_bitfield_data_size = (size_t)voxel_bitfield_data.size();
 
+	shape_settings.voxel_data = voxel_data.ptr();
+	shape_settings.voxel_data_size = (size_t)voxel_data.size();
+
 	const JPH::ShapeSettings::ShapeResult shape_result = shape_settings.Create();
 	ERR_FAIL_COND_V_MSG(shape_result.HasError(), nullptr, vformat("Failed to build Jolt Physics voxel shape with %s. It returned the following error: '%s'. This shape belongs to %s.", to_string(), to_godot(shape_result.GetError()), _owners_to_string()));
 
@@ -39,6 +42,7 @@ void JoltVoxelShape3D::set_data(const Variant &p_data)
 	const PackedByteArray voxel_corners = d["voxel_corner_data"];
 	const PackedByteArray voxel_edges = d["voxel_edge_data"];
 	const PackedByteArray voxel_bitfield = d["voxel_bitfield_data"];
+	const PackedByteArray voxel_data_ = d["voxel_data"];
 
 	// TODO: FIX THIS
 	// TODO: Perf. Comparing two voxel datas could be very slow here
@@ -51,6 +55,7 @@ void JoltVoxelShape3D::set_data(const Variant &p_data)
 	voxel_corner_data = voxel_corners;
 	voxel_edge_data = voxel_edges;
 	voxel_bitfield_data = voxel_bitfield;
+	voxel_data = voxel_data_;
 
 	destroy(); // Forces _build() to be called again
 }
@@ -63,6 +68,7 @@ Variant JoltVoxelShape3D::get_data() const
 	d["voxel_corner_data"] = voxel_corner_data;
 	d["voxel_edge_data"] = voxel_edge_data;
 	d["voxel_bitfield_data"] = voxel_bitfield_data;
+	d["voxel_data"] = voxel_data;
 	return d;
 }
 

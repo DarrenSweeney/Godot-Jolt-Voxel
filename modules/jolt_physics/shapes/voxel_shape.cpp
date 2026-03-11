@@ -100,16 +100,6 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
-#if 0
-	// If the point is outside the half-extents, it can't be in the grid
-	if (std::abs(argLocalPos.GetX()) > mHalfExtents.GetX() ||
-			std::abs(argLocalPos.GetY()) > mHalfExtents.GetY() ||
-			std::abs(argLocalPos.GetZ()) > mHalfExtents.GetZ()) {
-		// Return a sentinel value (like -1) to indicate "Outside"
-		return JPH::Vec3::sReplicate(-1.0f);
-	}
-#endif
-
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
 	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
@@ -123,46 +113,78 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 	return clampedIndex;
 }
 
-// NOTE: Unused right now, might be useful later for finding the surface voxel along a direction
-JPH::Vec3 VoxelShape::FindSurfaceVoxel(JPH::Vec3 solidVoxelPos, JPH::Vec3 localPenetrationAxis) const
-{
-	// Convert the world-space penetration axis into a grid-space step direction.
-	// The axis is already in shape2's local space, so we can map it to grid steps.
-	// We step one voxel at a time along the dominant axis.
-	JPH::Vec3 voxelSize = (mHalfExtents * 2.0f) / mResolution;
-
-	// Convert local-space axis to grid-space axis (divide by voxel size)
-	JPH::Vec3 gridStep = localPenetrationAxis / voxelSize;
-
-	// Clamp to unit steps per axis — we move one voxel at a time
-	gridStep = JPH::Vec3(
-			gridStep.GetX() != 0.0f ? (gridStep.GetX() > 0.0f ? 1.0f : -1.0f) : 0.0f,
-			gridStep.GetY() != 0.0f ? (gridStep.GetY() > 0.0f ? 1.0f : -1.0f) : 0.0f,
-			gridStep.GetZ() != 0.0f ? (gridStep.GetZ() > 0.0f ? 1.0f : -1.0f) : 0.0f);
-
-	// Only step along the dominant axis (matches how localNormal is computed)
-	int axisIndex = localPenetrationAxis.Abs().GetHighestComponentIndex();
-	JPH::Vec3 dominantStep = JPH::Vec3::sZero();
-	dominantStep.SetComponent(axisIndex, gridStep[axisIndex]);
-
-	JPH::Vec3 current = JPH::Vec3(
-			std::floor(solidVoxelPos.GetX()),
-			std::floor(solidVoxelPos.GetY()),
-			std::floor(solidVoxelPos.GetZ()));
-
-	// Walk outward (in the penetration direction) until we leave solid voxels
-	// Cap iterations to the resolution to avoid infinite loops
-	int maxSteps = (int)mResolution[axisIndex] + 1;
-	for (int step = 0; step < maxSteps; ++step)
-	{
-		JPH::Vec3 next = current + dominantStep;
-		if (!IsSolidAt(next))
-			break; // current is the surface voxel
-
-		current = next;
+// @todo: Maybe use pre-baked data instead?
+JPH::Vec3 VoxelShape::FindSurfaceVoxel(JPH::Vec3 solidVoxelPos) const {
+	if (!IsSolidAt(solidVoxelPos)) {
+		return solidVoxelPos;
 	}
 
-	return current;
+	auto IsSurfaceVoxel = [&](const JPH::Vec3 &pos) -> bool {
+		if (!IsSolidAt(pos)) {
+			return false;
+		}
+
+		static const JPH::Vec3 directions[] = {
+			JPH::Vec3(1, 0, 0), JPH::Vec3(-1, 0, 0),
+			JPH::Vec3(0, 1, 0), JPH::Vec3(0, -1, 0),
+			JPH::Vec3(0, 0, 1), JPH::Vec3(0, 0, -1)
+		};
+
+		for (const JPH::Vec3 &dir : directions) {
+			if (!IsSolidAt(pos + dir)) {
+				return true;
+			}
+		}
+		return false;
+	};
+
+	if (IsSurfaceVoxel(solidVoxelPos)) {
+		return solidVoxelPos;
+	}
+
+	// Expand a cubic shell at each step, checking all voxels on the shell surface
+	int maxSteps = 8;
+	for (int i = 1; i < maxSteps; i++) {
+		for (int x = -i; x <= i; x++) {
+			for (int y = -i; y <= i; y++) {
+				for (int z = -i; z <= i; z++) {
+					// Only check voxels on the outer shell (not inner shells already checked)
+					if (abs(x) != i && abs(y) != i && abs(z) != i) {
+						continue;
+					}
+
+					JPH::Vec3 candidate = solidVoxelPos + JPH::Vec3((float)x, (float)y, (float)z);
+
+					if (IsSurfaceVoxel(candidate)) {
+						return candidate;
+					}
+				}
+			}
+		}
+	}
+
+	return solidVoxelPos;
+}
+
+
+void VoxelShape::GetVoxelMetadata(JPH::Vec3Arg inGridPos, uint8_t &outType, JPH::Vec3 &outNormal) const
+{
+	int index = GetIndex((uint32_t)inGridPos.GetX(), (uint32_t)inGridPos.GetY(), (uint32_t)inGridPos.GetZ());
+
+	// Use the flat array (mVoxelData) not the bitfield
+	uint8_t packedByte = mVoxelData[index];
+
+	outType = packedByte >> 5;
+	uint8_t normalIdx = packedByte & 0x1F;
+
+	if (normalIdx < 26)
+	{
+		outNormal = normal_lut[normalIdx]; // Use your LUT of JPH::Vec3
+	}
+	else
+	{
+		outNormal = JPH::Vec3::sAxisY();
+	}
 }
 
 void VoxelShape::sCollidePointsVsGrid(
@@ -198,35 +220,53 @@ void VoxelShape::sCollidePointsVsGrid(
 
 		if (shape2->CheckVoxelCollision(gridPosVoxelShape2))
 		{
+			/**
+			 * @brief The 'localNormal' is a pre-calculated unit vector stored in the voxel grid.
+			 * * Unlike standard physics which calculates a normal based on the separation vector
+			 * between two points (prone to jitter on voxel faces), this normal is fetched from
+			 * a Look-Up Table (LUT) based on the voxel's pre-baked classification.
+			 * * Logic by VoxelType:
+			 * - SURFACE (Face, Edge, Corner): The average outward-facing normal of the voxel geometry.
+			 * - INSIDE: A 'Closest Point of Exit' vector pointing toward the nearest empty cell.
+			 * * PURPOSE: It provides a stable penetration axis for the Jolt solver, preventing
+			 * 'force-flipping' when objects slide across voxel boundaries and eliminating
+			 * the need for expensive runtime surface searches.
+			 * * @note This vector is in Voxel-Local space and must be transformed by the
+			 * body's Center of Mass (COM) rotation (Multiply3x3) before being used in world-space physics.
+			 */
+			uint8_t voxelType;
+			JPH::Vec3 localNormal;
+			shape2->GetVoxelMetadata(gridPosVoxelShape2, voxelType, localNormal);
+
 			JPH::Vec3 posLocalShape2 = shape2->GetLocalPos(gridPosVoxelShape2);
 
-			// Conver to world space
-			JPH::Vec3 inContactPointOn1 = inCenterOfMassTransform1 * posLocalShape1;
-			JPH::Vec3 inContactPointOn2 = inCenterOfMassTransform2 * posLocalShape2;
+			// Convert to world space
+			JPH::Vec3 voxelCenterWorldShape1 = inCenterOfMassTransform1 * posLocalShape1;
+			JPH::Vec3 voxelCenterWorldShape2 = inCenterOfMassTransform2 * posLocalShape2;
 
-			// Calculate the vector pointing from point on shape 2 to point on shape 1
-			JPH::Vec3 separation = inContactPointOn1 - inContactPointOn2;
+			// Calculate the vector pointing from shape 2 to shape 1
+			JPH::Vec3 separation = voxelCenterWorldShape1 - voxelCenterWorldShape2;
 
 			// The length of this vector represents the penetration depth
-			float penetrationDepthMeters = separation.Length();
+			float penetrationDepth = separation.Length();
 
 			// Initialize the axis to a zero vector as a fallback
 			JPH::Vec3 penetrationAxis = JPH::Vec3::sZero();
 
 			// Check if the penetration depth is larger than the smallest representable float
-			if (penetrationDepthMeters > 1.e-6f)
+			if (penetrationDepth > 1.e-6f)
 			{
 				// Divide the vector by its own length to get a unit vector (length of one)
-				penetrationAxis = separation / penetrationDepthMeters;
+				penetrationAxis = separation / penetrationDepth;
 			}
 
 			// Check if the penetration is bigger than the early out fraction
-			if (-penetrationDepthMeters < ioCollector.GetEarlyOutFraction())
+			if (-penetrationDepth < ioCollector.GetEarlyOutFraction())
 			{
 				JPH::CollideShapeResult result(
-						inContactPointOn1, inContactPointOn2, -penetrationAxis, penetrationDepthMeters,
+						voxelCenterWorldShape1, voxelCenterWorldShape2, -penetrationAxis, penetrationDepth,
 						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
-						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));	
+						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
 				// Gather faces
 				if (inCollideShapeSettings.mCollectFacesMode == JPH::ECollectFacesMode::CollectFaces)
@@ -236,6 +276,10 @@ void VoxelShape::sCollidePointsVsGrid(
 
 					// Get supporting face of shape 2
 					shape2->GetSupportingFace(JPH::SubShapeID(), inCenterOfMassTransform2.Multiply3x3Transposed(-penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face);
+
+					// Experiments, ignore this
+					//shape1->GetSupportingFace_(JPH::SubShapeID(), inCenterOfMassTransform1.Multiply3x3Transposed(penetrationAxis), inScale1, inCenterOfMassTransform1, result.mShape1Face, posLocalShape1);
+					//shape2->GetSupportingFace_(JPH::SubShapeID(), inCenterOfMassTransform2.Multiply3x3Transposed(-penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face, posLocalShape2);
 				}
 
 				ioCollector.AddHit(result);
@@ -368,6 +412,46 @@ void VoxelShape::GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec
 	for (JPH::Vec3 &v : outVertices) {
 		v = inCenterOfMassTransform * v;
 	}
+}
+
+void VoxelShape::GetSupportingFace_(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale,
+		JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices, JPH::Vec3 localContactPoint) const {
+	JPH_ASSERT(inSubShapeID.IsEmpty(), "Invalid subshape ID");
+
+	// Size of a single voxel in the grid
+	JPH::Vec3 voxelSize = (mHalfExtents * 2.0f) / mResolution;
+
+	// Scale the individual voxel size
+	JPH::Vec3 voxelScaledHalfExtent = inScale.Abs() * (voxelSize * 4);//0.5f);
+
+	// Create a temporary AABox representing just this one voxel's volume
+	JPH::AABox voxelBox(-voxelScaledHalfExtent, voxelScaledHalfExtent);
+
+	// Get the supporting face for this tiny box based on the impact direction
+	// This returns vertices centered around the origin (0, 0, 0)
+	voxelBox.GetSupportingFace(inDirection, outVertices);
+
+	// Map those tiny face vertices to the correct spot in the world
+	for (JPH::Vec3 &v : outVertices) {
+		// Move vertex to its specific location in the shape's local grid
+		v += localContactPoint;
+
+		// Move from shape-local space to world space
+		v = inCenterOfMassTransform * v;
+	}
+
+
+
+#if 1
+	JPH::Vec3 scaled_half_extent = inScale.Abs() * mHalfExtents;
+	JPH::AABox box(-scaled_half_extent, scaled_half_extent);
+	box.GetSupportingFace(inDirection, outVertices);
+
+	// Transform to world space
+	for (JPH::Vec3 &v : outVertices) {
+		v = inCenterOfMassTransform * v;
+	}
+#endif
 }
 
 const JPH::PhysicsMaterial* VoxelShape::GetMaterial(const JPH::SubShapeID &inSubShapeID) const

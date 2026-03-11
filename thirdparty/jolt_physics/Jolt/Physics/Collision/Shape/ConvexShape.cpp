@@ -559,7 +559,7 @@ void ConvexShape::sRegister()
 		for (EShapeSubType s2 : sConvexSubShapeTypes)
 		{
 			CollisionDispatch::sRegisterCollideShape(s1, s2, sCollideConvexVsConvex);
-			CollisionDispatch::sRegisterCastShape(s1, s2, sCastConvexVsConvex);
+			//CollisionDispatch::sRegisterCastShape(s1, s2, sCastConvexVsConvex);
 		}
 }
 

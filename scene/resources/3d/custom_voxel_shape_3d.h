@@ -13,6 +13,7 @@ private:
 	PackedByteArray voxel_corner_data;
 	PackedByteArray voxel_edge_data;
 	PackedByteArray voxel_bitfield_data;
+	PackedByteArray voxel_data;
 
 	_FORCE_INLINE_ int _get_index(int p_x, int p_y, int p_z) const {
 		// Matches: y * (width * depth) + z * width + x
@@ -36,6 +37,9 @@ public:
 
 	void set_voxel_bitfield_data(const PackedByteArray &p_data);
 	PackedByteArray get_voxel_bitfield_data() const;
+
+	void set_voxel_data(const PackedByteArray &p_data);
+	PackedByteArray get_voxel_data() const;
 
 	void set_resolution(const Vector3i &p_res);
 	Vector3i get_resolution() const { return resolution; }

@@ -9,6 +9,7 @@ class JoltVoxelShape3D final : public JoltShape3D
 	PackedByteArray voxel_corner_data;
 	PackedByteArray voxel_edge_data;
 	PackedByteArray voxel_bitfield_data;
+	PackedByteArray voxel_data;
 	float margin = 0.04f;
 
 	virtual JPH::ShapeRefC _build() const override;

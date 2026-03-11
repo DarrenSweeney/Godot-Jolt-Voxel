@@ -24,6 +24,9 @@ void CustomVoxelShape3D::_bind_methods()
 
 	ClassDB::bind_method(D_METHOD("set_voxel_bitfield_data", "voxel_bitfield_data"), &CustomVoxelShape3D::set_voxel_bitfield_data);
 	ClassDB::bind_method(D_METHOD("get_voxel_bitfield_data"), &CustomVoxelShape3D::get_voxel_bitfield_data);
+
+	ClassDB::bind_method(D_METHOD("set_voxel_data", "voxel_data"), &CustomVoxelShape3D::set_voxel_data);
+	ClassDB::bind_method(D_METHOD("get_voxel_data"), &CustomVoxelShape3D::get_voxel_data);
 	
 	// Bind Properties (This makes them show up in the Inspector and allows dot syntax)
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "size"), "set_size", "get_size");
@@ -31,6 +34,7 @@ void CustomVoxelShape3D::_bind_methods()
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_corner_data"), "set_voxel_corner_data", "get_voxel_corner_data");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_edge_data"), "set_voxel_edge_data", "get_voxel_edge_data");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_bitfield_data"), "set_voxel_bitfield_data", "get_voxel_bitfield_data");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "voxel_data"), "set_voxel_data", "get_voxel_data");
 }
 
 void CustomVoxelShape3D::_update_shape()
@@ -51,6 +55,7 @@ void CustomVoxelShape3D::_update_shape()
 	d["voxel_corner_data"] = voxel_corner_data;
 	d["voxel_edge_data"] = voxel_edge_data;
 	d["voxel_bitfield_data"] = voxel_bitfield_data;
+	d["voxel_data"] = voxel_data;
 
 	PhysicsServer3D::get_singleton()->shape_set_data(get_shape(), d);
 	Shape3D::_update_shape();
@@ -98,8 +103,19 @@ void CustomVoxelShape3D::set_voxel_bitfield_data(const PackedByteArray &p_data) 
 	emit_changed();
 }
 
+
 PackedByteArray CustomVoxelShape3D::get_voxel_bitfield_data() const {
 	return voxel_bitfield_data;
+}
+
+void CustomVoxelShape3D::set_voxel_data(const PackedByteArray &p_data) {
+	voxel_data = p_data;
+	_update_shape();
+	emit_changed();
+}
+
+PackedByteArray CustomVoxelShape3D::get_voxel_data() const {
+	return voxel_data;
 }
 
 void CustomVoxelShape3D::set_resolution(const Vector3i &p_res)

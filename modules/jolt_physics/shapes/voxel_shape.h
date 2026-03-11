@@ -30,7 +30,32 @@ public:
 	const uint8_t *voxel_bitfield_data = nullptr;
 	size_t voxel_bitfield_data_size = 0;
 
+	const uint8_t *voxel_data = nullptr;
+	size_t voxel_data_size = 0;
+
 	virtual JPH::ShapeSettings::ShapeResult Create() const override;
+};
+
+static const JPH::Vec3 normal_lut[26] {
+	// Cardinal directions
+	{ 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 },
+	{ -1, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 },
+	// Edge directions
+	{ 1, 1, 0 }, { 1, 0, 1 }, { 0, 1, 1 },
+	{ -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 },
+	{ 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 },
+	{ -1, -1, 0 }, { -1, 0, -1 }, { 0, -1, -1 },
+	// Corner directions
+	{ 1, 1, 1 }, { 1, 1, -1 }, { 1, -1, 1 }, { 1, -1, -1 },
+	{ -1, 1, 1 }, { -1, 1, -1 }, { -1, -1, 1 }, { -1, -1, -1 }
+};
+
+enum VoxelType : uint8_t {
+	VoxelType_Empty,
+	VoxelType_Corner,
+	VoxelType_Edge,
+	VoxelType_Face,
+	VoxelType_Inside
 };
 
 class VoxelShape : public JPH::Shape
@@ -49,6 +74,9 @@ public:
 	const uint8_t *mVoxelBitfieldData = nullptr;
 	size_t mVoxelBitfieldSize = 0;
 
+	const uint8_t *mVoxelData = nullptr;
+	size_t mVoxelDataSize = 0;
+
 
 	VoxelShape() :
 			JPH::Shape(JPH::EShapeType::User1, JoltCustomShapeSubType::VOXEL) { }
@@ -65,7 +93,10 @@ public:
 			mVoxelEdgeDataSize(inSettings.voxel_edge_data_size),
 
 			mVoxelBitfieldData(inSettings.voxel_bitfield_data),
-			mVoxelBitfieldSize(inSettings.voxel_bitfield_data_size)
+			mVoxelBitfieldSize(inSettings.voxel_bitfield_data_size),
+
+			mVoxelData(inSettings.voxel_data),
+			mVoxelDataSize(inSettings.voxel_data_size)
 
 	{
 		if (outResult.HasError())
@@ -106,13 +137,14 @@ public:
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
 
 
+	void GetVoxelMetadata(JPH::Vec3Arg inGridPos, uint8_t &outType, JPH::Vec3 &outNormal) const;
 	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
 
 	bool CheckVoxelCollision(JPH::Vec3 &voxelGridPos) const;
 	JPH::Vec3 GetLocalPos(const JPH::Vec3 &argIndex) const;
 	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
-	JPH::Vec3 FindSurfaceVoxel(JPH::Vec3 solidVoxelPos, JPH::Vec3 localPenetrationAxis) const;
+	JPH::Vec3 FindSurfaceVoxel(JPH::Vec3 solidVoxelPos) const;
 
 	/// Set density of the shape (kg / m^3)
 	void SetDensity(float inDensity);
@@ -120,6 +152,7 @@ public:
 	float GetDensity() const;
 	
 	void GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices) const;
+	void GetSupportingFace_(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices, JPH::Vec3 inContactPoint) const;
 
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
