@@ -137,6 +137,7 @@ public:
 	virtual void CollidePoint(JPH::Vec3Arg inPoint, const JPH::SubShapeIDCreator &inSubShapeIDCreator, JPH::CollidePointCollector &ioCollector, const JPH::ShapeFilter &inShapeFilter) const override;
 
 
+	JPH::Vec3 FindSurfaceVoxelAlongNormal(JPH::Vec3Arg inStartingGridPos) const;
 	void GetVoxelMetadata(JPH::Vec3Arg inGridPos, uint8_t &outType, JPH::Vec3 &outNormal) const;
 	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
@@ -146,13 +147,17 @@ public:
 	JPH::Vec3 GetGridIndex(const JPH::Vec3 &argLocalPos) const;
 	JPH::Vec3 FindSurfaceVoxel(JPH::Vec3 solidVoxelPos) const;
 
+	JPH::Vec3 GetVoxelSize() const {
+		JPH::Vec3 voxelSize = (mHalfExtents * 2.0f) / mResolution;
+		return voxelSize;
+	}
+
 	/// Set density of the shape (kg / m^3)
 	void SetDensity(float inDensity);
 	// Get density of the shape (kg / m^3)
 	float GetDensity() const;
 	
-	void GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices) const;
-	void GetSupportingFace_(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices, JPH::Vec3 inContactPoint) const;
+	void GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale, JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices, JPH::Vec3 inContactPoint, JPH::Vec3 inContactPointGlobal) const;
 
 	// --- Must Implement: Basic Geometry ---
 	virtual JPH::AABox GetLocalBounds() const override { return JPH::AABox(-mHalfExtents, mHalfExtents); }
