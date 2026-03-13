@@ -100,6 +100,7 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
+#if 0
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
 	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
@@ -111,6 +112,21 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 	JPH::Vec3 clampedIndex = JPH::Vec3::sMin(JPH::Vec3::sMax(JPH::Vec3::sZero(), fractionalIndex), maxIndex);
 
 	return clampedIndex;
+#endif
+
+	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
+	JPH::Vec3 shiftedPos = argLocalPos + mHalfExtents;
+	JPH::Vec3 fractionalIndex = (shiftedPos / fullSize) * mResolution;
+
+	// Reject before clamping — return -1 sentinel if outside
+	if (fractionalIndex.GetX() < 0.0f || fractionalIndex.GetX() >= mResolution.GetX() ||
+			fractionalIndex.GetY() < 0.0f || fractionalIndex.GetY() >= mResolution.GetY() ||
+			fractionalIndex.GetZ() < 0.0f || fractionalIndex.GetZ() >= mResolution.GetZ()) {
+		return JPH::Vec3::sReplicate(-1.0f); // sentinel
+	}
+
+	JPH::Vec3 maxIndex = mResolution - JPH::Vec3::sReplicate(1.0f);
+	return JPH::Vec3::sMin(JPH::Vec3::sMax(JPH::Vec3::sZero(), fractionalIndex), maxIndex);
 }
 
 // @todo: Maybe use pre-baked data instead?
