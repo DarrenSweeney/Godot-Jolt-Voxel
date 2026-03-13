@@ -100,7 +100,7 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
-#if 0
+#if 1
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
 	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
@@ -114,6 +114,7 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 	return clampedIndex;
 #endif
 
+#if 0
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 	JPH::Vec3 shiftedPos = argLocalPos + mHalfExtents;
 	JPH::Vec3 fractionalIndex = (shiftedPos / fullSize) * mResolution;
@@ -127,6 +128,7 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 
 	JPH::Vec3 maxIndex = mResolution - JPH::Vec3::sReplicate(1.0f);
 	return JPH::Vec3::sMin(JPH::Vec3::sMax(JPH::Vec3::sZero(), fractionalIndex), maxIndex);
+#endif
 }
 
 // @todo: Maybe use pre-baked data instead?
@@ -510,6 +512,10 @@ void VoxelShape::GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec
 	// Get the supporting face for this tiny box (returns 4 vertices for a quad)
 	voxelBox.GetSupportingFace(inDirection, outVertices);
 
+	 JPH_ASSERT(localContactPoint.GetX() >= -mHalfExtents.GetX() - 0.01f &&
+					localContactPoint.GetX() <= mHalfExtents.GetX() + 0.01f,
+			"localContactPoint is outside shape bounds — wrong space?");
+
 	// Map those tiny face vertices to the correct spot
 	for (JPH::Vec3 &v : outVertices) {
 		// 1. Move the vertex to the voxel's specific local position
@@ -521,12 +527,16 @@ void VoxelShape::GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec
 #if 0
 	JPH::Vec3 scaled_half_extent = (inScale.Abs() * mHalfExtents);//*0.5;
 	JPH::AABox box(-scaled_half_extent, scaled_half_extent);
+	JPH::Shape::SupportingFace test;
 	box.GetSupportingFace(inDirection, outVertices);
 
 	// Transform to world space
 	for (JPH::Vec3 &v : outVertices) {
 		v = inCenterOfMassTransform * v;
 	}
+
+	int debug = 0;
+	debug++;
 #endif
 }
 
