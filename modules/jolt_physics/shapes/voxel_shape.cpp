@@ -100,7 +100,7 @@ JPH::Vec3 VoxelShape::GetLocalPos(const JPH::Vec3 &argIndex) const
 
 JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 {
-#if 1
+#if 0
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 
 	// Shift the centered local pos (-HE to +HE) to positive range (0 to FullSize)
@@ -114,7 +114,7 @@ JPH::Vec3 VoxelShape::GetGridIndex(const JPH::Vec3 &argLocalPos) const
 	return clampedIndex;
 #endif
 
-#if 0
+#if 1
 	JPH::Vec3 fullSize = mHalfExtents * 2.0f;
 	JPH::Vec3 shiftedPos = argLocalPos + mHalfExtents;
 	JPH::Vec3 fractionalIndex = (shiftedPos / fullSize) * mResolution;
@@ -332,7 +332,9 @@ void VoxelShape::sCollidePointsVsGrid(
 				// For deep voxels, use the blog's trick: push out by a full voxel size
 				// This ensures the object is aggressively ejected
 				penetrationDepth = shape2->GetVoxelSize().GetX();
-			} else {
+			}
+			else
+			{
 				// For SURFACE voxels, project the actual distance onto the normal
 				// This gives a much smoother "glide" over the surface
 				JPH::Vec3 voxelCenterWorldShape1 = inCenterOfMassTransform1 * posLocalShape1;
@@ -351,12 +353,25 @@ void VoxelShape::sCollidePointsVsGrid(
 				JPH::Vec3 contactPointOn1 = inCenterOfMassTransform1 * posLocalShape1;
 				JPH::Vec3 contactPointOn2 = inCenterOfMassTransform2 * shape2->GetLocalPos(gridPosVoxelShape2);
 
+				auto PackVoxelID = [](const JPH::SubShapeIDCreator &inBaseCreator, JPH::Vec3Arg inGridPos) -> JPH::SubShapeID {
+					JPH::SubShapeIDCreator creator = inBaseCreator;
+
+					// Pack coordinates into bits so each voxel is unique	
+					creator.PushID(inGridPos.GetX(), 10);
+					creator.PushID(inGridPos.GetY(), 10);
+					creator.PushID(inGridPos.GetZ(), 10);
+					return creator.GetID();
+				};
+
+				JPH::SubShapeID id1 = PackVoxelID(inSubShapeIDCreator1, gridPosVoxelShape1);
+				JPH::SubShapeID id2 = PackVoxelID(inSubShapeIDCreator2, gridPosVoxelShape2);
+
 				JPH::CollideShapeResult result(
 						contactPointOn1,
 						contactPointOn2,
 						-penetrationAxis,
 						penetrationDepth,
-						inSubShapeIDCreator1.GetID(), inSubShapeIDCreator2.GetID(),
+						id1, id2,
 						JPH::TransformedShape::sGetBodyID(ioCollector.GetContext()));
 
 				// Gather faces
@@ -370,10 +385,12 @@ void VoxelShape::sCollidePointsVsGrid(
 					JPH::Vec3 surfacePosLocalShape2 = shape2->GetLocalPos(surfaceGridPos2);
 
 					// Get supporting face of shape 1
-					shape1->GetSupportingFace(JPH::SubShapeID(), inCenterOfMassTransform1.Multiply3x3Transposed(penetrationAxis), inScale1, inCenterOfMassTransform1, result.mShape1Face, surfacePosLocalShape1, contactPointOn1);
+					shape1->GetSupportingFace(id1, inCenterOfMassTransform1.Multiply3x3Transposed(penetrationAxis), inScale1,
+												inCenterOfMassTransform1, result.mShape1Face, surfacePosLocalShape1, contactPointOn1);
 
 					// Get supporting face of shape 2
-					shape2->GetSupportingFace(JPH::SubShapeID(), inCenterOfMassTransform2.Multiply3x3Transposed(-penetrationAxis), inScale2, inCenterOfMassTransform2, result.mShape2Face, surfacePosLocalShape2, contactPointOn2);
+					shape2->GetSupportingFace(id2, inCenterOfMassTransform2.Multiply3x3Transposed(-penetrationAxis), inScale2,
+												inCenterOfMassTransform2, result.mShape2Face, surfacePosLocalShape2, contactPointOn2);
 				}
 
 				ioCollector.AddHit(result);
@@ -497,34 +514,65 @@ JPH::Vec3 VoxelShape::GetSurfaceNormal(const JPH::SubShapeID &inSubShapeID, JPH:
 void VoxelShape::GetSupportingFace(const JPH::SubShapeID &inSubShapeID, JPH::Vec3Arg inDirection, JPH::Vec3Arg inScale,
 		JPH::Mat44Arg inCenterOfMassTransform, JPH::Shape::SupportingFace &outVertices, JPH::Vec3 localContactPoint, JPH::Vec3 worldContactPoint) const
 {
+#if 1
 	JPH_ASSERT(inSubShapeID.IsEmpty(), "Invalid subshape ID");
 
-#if 1
 	// Get the unscaled size of a single voxel
-	JPH::Vec3 voxelHalfExtent = GetVoxelSize() * 0.5f;
-
-	// Apply scale to the half extent
+	JPH::Vec3 voxelSize = GetVoxelSize();
+	JPH::Vec3 voxelHalfExtent = voxelSize * 0.5f;
 	JPH::Vec3 voxelScaledHalfExtent = inScale.Abs() * voxelHalfExtent;
+#if 0
 
-	// Create a temporary AABox representing just this one voxel's volume at origin
+	// Use a temporary box to get the base quad vertices at origin
 	JPH::AABox voxelBox(-voxelScaledHalfExtent, voxelScaledHalfExtent);
-
-	// Get the supporting face for this tiny box (returns 4 vertices for a quad)
 	voxelBox.GetSupportingFace(inDirection, outVertices);
 
-	 JPH_ASSERT(localContactPoint.GetX() >= -mHalfExtents.GetX() - 0.01f &&
-					localContactPoint.GetX() <= mHalfExtents.GetX() + 0.01f,
-			"localContactPoint is outside shape bounds — wrong space?");
+	// Identify the primary axis of the normal (e.g., Y-up is axis 1)
+	JPH::Vec3 absDir = inDirection.Abs();
+	int normalAxis = absDir.GetHighestComponentIndex();
 
-	// Map those tiny face vertices to the correct spot
+	// A smaller expansion factor (e.g., 2.0) is usually safer than 8.0.
+	// 8.0 might cause the face to overlap way too many neighboring voxels.
+	float expansionFactor = 32.0f;
+
 	for (JPH::Vec3 &v : outVertices) {
-		// 1. Move the vertex to the voxel's specific local position
-		// 2. Transform the local position to world space
+		// 1. Expand only the axes perpendicular to the normal
+		for (int axis = 0; axis < 3; ++axis) {
+			if (axis != normalAxis) {
+				v.SetComponent(axis, v[axis] * expansionFactor);
+			}
+		}
+
+		// 2. Snap the vertex to the voxel's local face center, then transform to world
+		// We use localContactPoint which we passed from sCollidePointsVsGrid
 		v = inCenterOfMassTransform * (v + localContactPoint);
 	}
+
+	JPH::Vec3 scaled_half_extent = (inScale.Abs() * mHalfExtents); //*0.5;
+	JPH::AABox box(-scaled_half_extent, scaled_half_extent);
+	JPH::Shape::SupportingFace test;
+	box.GetSupportingFace(inDirection, test);
+
+	// Transform to world space
+	for (JPH::Vec3 &v : test) {
+		v = inCenterOfMassTransform * v;
+	}
+
 #endif
 
-#if 0
+	//JPH::Shape::SupportingFace test_again;
+	JPH::AABox voxelBox_test(localContactPoint - voxelScaledHalfExtent,
+			localContactPoint + voxelScaledHalfExtent);
+	voxelBox_test.GetSupportingFace(inDirection, outVertices);
+
+	// Transform to world space (no extra offset needed)
+	for (JPH::Vec3 &v : outVertices) {
+		v = inCenterOfMassTransform * v;
+	}
+
+	int debug = 0;
+	debug++;
+#else
 	JPH::Vec3 scaled_half_extent = (inScale.Abs() * mHalfExtents);//*0.5;
 	JPH::AABox box(-scaled_half_extent, scaled_half_extent);
 	JPH::Shape::SupportingFace test;
