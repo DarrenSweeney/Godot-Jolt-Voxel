@@ -245,6 +245,75 @@ JPH::Vec3 VoxelShape::FindSurfaceVoxelAlongNormal(JPH::Vec3Arg inStartingGridPos
 	return inStartingGridPos;
 }
 
+// Walk outward from an inside voxel in a CALLER-SPECIFIED direction.
+// Used when the probe has sunk into shape2 — we walk backwards along the
+// approach vector (shape1's normal rotated into shape2's space) to find the
+// actual entry surface, which may be on a completely different face than the
+// baked inside-voxel escape normal points to.
+JPH::Vec3 VoxelShape::FindSurfaceVoxelInDirection(JPH::Vec3Arg inStartingGridPos, JPH::Vec3Arg inDir) const
+{
+	if (!IsSolidAt(inStartingGridPos))
+		return inStartingGridPos;
+
+	// Already a surface voxel? No walk needed.
+	uint8_t startType;
+	JPH::Vec3 dummy;
+	GetVoxelMetadata(inStartingGridPos, startType, dummy);
+	if (startType > VoxelType_Empty && startType < VoxelType_Inside)
+		return inStartingGridPos;
+
+	JPH::Vec3 dir = inDir.NormalizedOr(JPH::Vec3::sAxisY());
+
+	JPH::Vec3 currentPos = inStartingGridPos;
+	int maxSteps = (int)mResolution.Length() + 2;
+
+	for (int i = 0; i < maxSteps; ++i)
+	{
+		currentPos += dir;
+
+		JPH::Vec3 roundedPos(
+				std::round(currentPos.GetX()),
+				std::round(currentPos.GetY()),
+				std::round(currentPos.GetZ()));
+
+		// Out of bounds → last position before exiting was the surface
+		if (roundedPos.GetX() < 0 || roundedPos.GetX() >= mResolution.GetX() ||
+				roundedPos.GetY() < 0 || roundedPos.GetY() >= mResolution.GetY() ||
+				roundedPos.GetZ() < 0 || roundedPos.GetZ() >= mResolution.GetZ())
+		{
+			// The voxel just before going OOB is our surface candidate
+			JPH::Vec3 prevPos(
+					std::round((currentPos.GetX() - dir.GetX())),
+					std::round((currentPos.GetY() - dir.GetY())),
+					std::round((currentPos.GetZ() - dir.GetZ())));
+			return IsSolidAt(prevPos) ? prevPos : inStartingGridPos;
+		}
+
+		uint8_t type;
+		JPH::Vec3 norm;
+		GetVoxelMetadata(roundedPos, type, norm);
+
+		// Hit a labelled surface voxel — perfect
+		if (type > VoxelType_Empty && type < VoxelType_Inside)
+			return roundedPos;
+
+		// Walked into empty space → the previous solid step was the surface
+		if (type == VoxelType_Empty)
+		{
+			JPH::Vec3 prevPos(
+					std::round((currentPos.GetX() - dir.GetX())),
+					std::round((currentPos.GetY() - dir.GetY())),
+					std::round((currentPos.GetZ() - dir.GetZ())));
+			if (IsSolidAt(prevPos))
+				return prevPos;
+			return inStartingGridPos;
+		}
+		// VoxelType_Inside → keep walking
+	}
+
+	return inStartingGridPos;
+}
+
 void VoxelShape::GetVoxelMetadata(JPH::Vec3Arg inGridPos, uint8_t &outType, JPH::Vec3 &outNormal) const
 {
 	int index = GetIndex((uint32_t)inGridPos.GetX(), (uint32_t)inGridPos.GetY(), (uint32_t)inGridPos.GetZ());
@@ -333,7 +402,25 @@ void VoxelShape::sCollidePointsVsGrid(
 				c.gridPosShape2  = gridPosVoxelShape2;
 				c.posLocalShape1 = posLocalShape1;
 				shape2->GetVoxelMetadata(gridPosVoxelShape2, c.voxelType, c.localNormal);
-				c.posLocalShape2 = shape2->GetLocalPos(gridPosVoxelShape2) + c.localNormal * voxelHalfSize2;
+
+				// If the probe landed inside an interior voxel, walk BACKWARDS along
+				// the approach direction to find the actual entry surface on shape2.
+				// Using shape2's baked inside-voxel escape normal is wrong here:
+				// that normal points outward based on the voxel's topology at rest,
+				// but the probe may have entered from a completely different face
+				// (e.g. corner piercing a side face → baked normal points up, but
+				// the entry is through the side → we'd push in the wrong direction).
+				if (c.voxelType == VoxelType_Inside)
+				{
+					// shape1's outward normal in shape2's local space gives the approach
+					// direction. Negate it to walk back toward the entry surface.
+					JPH::Vec3 approachInShape2 = transform1To2.Multiply3x3(normal1).NormalizedOr(JPH::Vec3::sAxisY());
+					JPH::Vec3 surfaceGrid = shape2->FindSurfaceVoxelInDirection(gridPosVoxelShape2, -approachInShape2);
+					shape2->GetVoxelMetadata(surfaceGrid, c.voxelType, c.localNormal);
+					c.gridPosShape2 = surfaceGrid;
+				}
+
+				c.posLocalShape2 = shape2->GetLocalPos(c.gridPosShape2) + c.localNormal * voxelHalfSize2;
 				candidates.push_back(c);
 			}
 		}
@@ -378,18 +465,12 @@ void VoxelShape::sCollidePointsVsGrid(
 		JPH::Vec3 contactPointOn1 = inCenterOfMassTransform1 * c.posLocalShape1;
 		JPH::Vec3 contactPointOn2 = inCenterOfMassTransform2 * c.posLocalShape2;
 
-		float penetrationDepth;
-		if (c.voxelType == VoxelType_Inside)
-		{
-			// Deep voxels: eject by a full voxel width regardless of depth projection
-			penetrationDepth = shape2->GetVoxelSize().GetX();
-		}
-		else
-		{
-			// Project the centre-to-centre vector onto the consensus normal
-			JPH::Vec3 diff = contactPointOn1 - contactPointOn2;
-			penetrationDepth = JPH::max(0.001f, diff.Dot(consensusWorldNormal));
-		}
+		// diff points from shape2's contact surface INTO shape2 (probe is inside shape2,
+		// contact point is on shape2's surface above/outside it). That makes diff point
+		// opposite to the outward consensusWorldNormal, so diff.Dot(normal) is negative.
+		// Negate to get a positive penetration depth that scales with actual overlap.
+		JPH::Vec3 diff = contactPointOn1 - contactPointOn2;
+		float penetrationDepth = JPH::max(0.001f, -diff.Dot(consensusWorldNormal));
 
 		if (-penetrationDepth < ioCollector.GetEarlyOutFraction())
 		{
@@ -439,13 +520,28 @@ void VoxelShape::sCollideVoxelVsVoxelLocal(
 		const JPH::CollideShapeSettings &inCollideShapeSettings,
 		JPH::CollideShapeCollector &ioCollector)
 {
-	// Shape 1 corners vs Shape 2 grid
+	// Pass A: Shape 1 surface voxels probe shape 2's grid
+	int hitsBefore = ioCollector.GetNumHits();
 	sCollidePointsVsGrid(
 			inShape1, inShape2,
 			inScale1, inScale2,
 			inCenterOfMassTransform1, inCenterOfMassTransform2,
 			inSubShapeIDCreator1, inSubShapeIDCreator2,
 			inCollideShapeSettings, ioCollector);
+
+	// Pass B: Shape 2 surface voxels probe shape 1's grid.
+	// Only run if pass A found nothing — this handles the case where shape2's
+	// corners are fully inside shape1 (so shape1→shape2 probing finds no hits)
+	// but would double the separation force if both passes fire simultaneously.
+	if (ioCollector.GetNumHits() == hitsBefore)
+	{
+		sCollidePointsVsGrid(
+				inShape2, inShape1,
+				inScale2, inScale1,
+				inCenterOfMassTransform2, inCenterOfMassTransform1,
+				inSubShapeIDCreator2, inSubShapeIDCreator1,
+				inCollideShapeSettings, ioCollector);
+	}
 }
 
 void VoxelShape::sCollideVoxelVsVoxel(const JPH::Shape *inShape1, const JPH::Shape *inShape2, JPH::Vec3Arg inScale1, JPH::Vec3Arg inScale2,

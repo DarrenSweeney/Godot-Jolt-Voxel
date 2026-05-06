@@ -138,6 +138,7 @@ public:
 
 
 	JPH::Vec3 FindSurfaceVoxelAlongNormal(JPH::Vec3Arg inStartingGridPos) const;
+	JPH::Vec3 FindSurfaceVoxelInDirection(JPH::Vec3Arg inStartingGridPos, JPH::Vec3Arg inDir) const;
 	void GetVoxelMetadata(JPH::Vec3Arg inGridPos, uint8_t &outType, JPH::Vec3 &outNormal) const;
 	bool IsSolidAt(const JPH::Vec3 &voxelGridPos) const;
 	int GetIndex(uint32_t x, uint32_t y, uint32_t z) const;
